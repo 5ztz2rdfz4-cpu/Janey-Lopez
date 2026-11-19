@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="ms" data-resolution="portrait">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <link rel="stylesheet" href="assets/fonts/fonts.css" />
+    <script src="assets/js/gsap.min.js"></script>
+    <style>
+      :root {
+        --navy: #081127;
+        --navy2: #10224d;
+        --gold: #f4b942;
+        --gold2: #ffd77a;
+        --teal: #31d0aa;
+        --coral: #ff6b6b;
+        --ink: #ffffff;
+        --muted: #aab6d3;
+        --card: rgba(255, 255, 255, 0.06);
+        --line: rgba(255, 255, 255, 0.14);
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 1080px; height: 1920px; overflow: hidden;
+        background: var(--navy);
+        font-family: "Montserrat", "Inter", sans-serif;
+        color: var(--ink);
+      }
+      #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; }
+      .clip { position: absolute; inset: 0; }
+      .abs { position: absolute; }
+      .center-x { left: 50%; transform: translateX(-50%); }
+
+      /* ---------- background ---------- */
+      #bg {
+        background:
+          radial-gradient(1200px 900px at 50% 28%, #183172 0%, rgba(16, 34, 77, 0) 60%),
+          radial-gradient(900px 900px at 85% 95%, rgba(244, 185, 66, 0.18) 0%, rgba(244, 185, 66, 0) 60%),
+          linear-gradient(180deg, #0b1734 0%, #081127 55%, #060d1f 100%);
+      }
+      #pattern { position: absolute; left: -200px; top: -200px; width: 1480px; height: 2320px; opacity: 0.07; }
+      .dot { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--gold2); box-shadow: 0 0 14px var(--gold); }
+      #vignette { background: radial-gradient(1100px 1500px at 50% 45%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.55) 100%); }
+      #flash { background: #fff; opacity: 0; }
+
+      /* ---------- shared ---------- */
+      .chip {
+        position: absolute; top: 210px; left: 70px;
+        display: inline-flex; align-items: center; gap: 14px;
+        padding: 14px 28px; border-radius: 999px;
+        font: 800 30px/1 "Montserrat"; letter-spacing: 0.12em; text-transform: uppercase;
+        background: rgba(244, 185, 66, 0.14); color: var(--gold2);
+        border: 2px solid rgba(244, 185, 66, 0.55);
+      }
+      .chip .pip { width: 14px; height: 14px; border-radius: 50%; background: currentColor; box-shadow: 0 0 12px currentColor; }
+      .chip.coral { background: rgba(255,107,107,0.14); color: #ff9b9b; border-color: rgba(255,107,107,0.6); }
+      .chip.teal { background: rgba(49,208,170,0.14); color: #7ff0d2; border-color: rgba(49,208,170,0.6); }
+      .h1 { position: absolute; left: 70px; right: 70px; top: 300px; font: 900 84px/1.04 "Montserrat"; letter-spacing: -0.02em; }
+      .h1 .g { color: var(--gold); }
+      .h1 .c { color: var(--coral); }
+      .h1 .t { color: var(--teal); }
+      .sub { font: 600 36px/1.3 "Poppins"; color: var(--muted); }
+      .card {
+        background: linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.035));
+        border: 2px solid var(--line); border-radius: 36px;
+        box-shadow: 0 30px 80px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.12);
+      }
+      svg { overflow: visible; }
+
+      /* ---------- speaker badge ---------- */
+      #badge { position: absolute; top: 196px; right: 60px; display: flex; align-items: center; gap: 16px; flex-direction: row-reverse; }
+      #badge .av { width: 92px; height: 92px; border-radius: 50%; border: 4px solid var(--gold); background: url(assets/img/jannah.jpg) 50% 14% / 150% auto no-repeat; box-shadow: 0 0 0 6px rgba(244,185,66,0.15); }
+      #badge .nm { text-align: right; font: 800 26px/1.15 "Montserrat"; }
+      #badge .nm small { display: block; font: 500 20px/1.3 "Poppins"; color: var(--muted); letter-spacing: 0.04em; }
+
+      /* ---------- captions ---------- */
+      #caps { position: absolute; left: 60px; right: 60px; top: 1400px; height: 160px; }
+      .cap {
+        position: absolute; left: 0; right: 0; top: 0; text-align: center; opacity: 0;
+        font: 900 66px/1.12 "Montserrat"; text-transform: uppercase; letter-spacing: 0.01em;
+        color: #fff; text-shadow: 0 5px 0 rgba(0,0,0,0.55), 0 0 30px rgba(0,0,0,0.6);
+        -webkit-text-stroke: 2px rgba(0,0,0,0.35);
+      }
+      .cap .hl { color: #1a1300; background: var(--gold); padding: 0 16px; border-radius: 14px; -webkit-text-stroke: 0; text-shadow: none; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+
+      /* ---------- S1 hook ---------- */
+      #s1 .kicker { top: 250px; }
+      #s1 .w { display: inline-block; }
+      #hookTitle { position: absolute; left: 0; right: 0; top: 330px; text-align: center; font: 900 120px/0.98 "Montserrat"; letter-spacing: -0.03em; }
+      #hookTitle .big { font-size: 250px; color: var(--gold); text-shadow: 0 0 60px rgba(244,185,66,0.45); }
+      #gauge { left: 190px; top: 860px; width: 700px; height: 430px; }
+      #gaugeNum { position: absolute; left: 0; right: 0; top: 165px; text-align: center; font: 900 150px/1 "Montserrat"; }
+      #gaugeLbl { position: absolute; left: 0; right: 0; top: 330px; text-align: center; font: 700 30px/1 "Poppins"; color: var(--muted); letter-spacing: 0.3em; }
+      #stamp {
+        position: absolute; left: 160px; top: 930px; width: 760px; padding: 26px 0; text-align: center;
+        font: 900 120px/1 "Montserrat"; color: var(--coral); border: 12px solid var(--coral); border-radius: 30px;
+        background: rgba(30, 6, 10, 0.55); text-shadow: 0 0 40px rgba(255,107,107,0.5); opacity: 0;
+      }
+      #hookPhoto { position: absolute; left: 230px; top: 700px; width: 620px; height: 760px; border-radius: 40px; overflow: hidden; border: 6px solid var(--gold); box-shadow: 0 40px 120px rgba(0,0,0,0.6), 0 0 0 14px rgba(244,185,66,0.12); opacity: 0; }
+      #hookPhoto img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 0%; }
+      #hookLower { position: absolute; left: 150px; top: 1240px; width: 780px; padding: 26px 36px; border-radius: 28px; background: linear-gradient(90deg, #f4b942, #ffd77a); color: #1a1300; opacity: 0; box-shadow: 0 20px 60px rgba(0,0,0,0.45); }
+      #hookLower b { display: block; font: 900 56px/1 "Montserrat"; letter-spacing: 0.02em; }
+      #hookLower span { display: block; margin-top: 10px; font: 700 28px/1 "Poppins"; letter-spacing: 0.08em; opacity: 0.8; }
+
+      /* ---------- S2 problem ---------- */
+      .node { position: absolute; width: 330px; height: 330px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; }
+      .node b { font: 900 46px/1 "Montserrat"; }
+      .node small { font: 600 26px/1.2 "Poppins"; color: var(--muted); }
+      #nodeA { left: 70px; top: 700px; background: radial-gradient(circle at 35% 30%, #2a4aa0, #12245a); border: 5px solid var(--gold); box-shadow: 0 0 60px rgba(244,185,66,0.3); }
+      #nodeB { right: 70px; top: 700px; background: radial-gradient(circle at 35% 30%, #1d6b5c, #0d3a33); border: 5px solid var(--teal); box-shadow: 0 0 60px rgba(49,208,170,0.3); }
+      #bridge { left: 380px; top: 840px; width: 320px; height: 60px; }
+      #xmark { left: 470px; top: 790px; width: 140px; height: 140px; opacity: 0; }
+      #probNote { position: absolute; left: 90px; right: 90px; top: 1130px; text-align: center; padding: 30px; }
+      #probNote b { color: var(--coral); }
+
+      /* ---------- S3 reality ---------- */
+      .col { position: absolute; top: 560px; width: 450px; height: 720px; padding: 36px 30px; }
+      #colA { left: 60px; }
+      #colB { right: 60px; border-color: rgba(255,107,107,0.55); background: linear-gradient(180deg, rgba(255,107,107,0.14), rgba(255,107,107,0.04)); }
+      .col h3 { font: 900 40px/1.05 "Montserrat"; letter-spacing: 0.03em; margin-bottom: 30px; text-align: center; }
+      #colA h3 { color: #9fc0ff; }
+      #colB h3 { color: #ff9b9b; }
+      .item { display: flex; align-items: center; gap: 18px; padding: 22px 20px; margin-bottom: 20px; border-radius: 22px; background: rgba(255,255,255,0.06); font: 700 31px/1.15 "Poppins"; }
+      .ic { flex: 0 0 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font: 900 32px/1 "Montserrat"; }
+      .ic.ok { background: var(--teal); color: #052a22; }
+      .ic.bad { background: var(--coral); color: #2a0505; }
+      #neq { position: absolute; left: 470px; top: 840px; width: 140px; height: 140px; border-radius: 50%; background: var(--gold); color: #1a1300; display: flex; align-items: center; justify-content: center; font: 900 110px/1 "Montserrat"; box-shadow: 0 0 0 14px rgba(244,185,66,0.2), 0 20px 50px rgba(0,0,0,0.5); }
+
+      /* ---------- S4 WEF ---------- */
+      #wefHead { position: absolute; left: 70px; right: 70px; top: 300px; display: flex; align-items: center; gap: 30px; }
+      #globe { flex: 0 0 150px; height: 150px; }
+      #wefHead b { display: block; font: 900 58px/1 "Montserrat"; letter-spacing: 0.01em; }
+      #wefHead span { display: block; margin-top: 12px; font: 700 34px/1 "Poppins"; color: var(--gold2); }
+      #wefTitle { position: absolute; left: 70px; right: 70px; top: 500px; font: 900 64px/1.05 "Montserrat"; }
+      #wefTitle .g { color: var(--gold); }
+      .tile { position: absolute; width: 455px; height: 205px; padding: 26px 28px; display: flex; align-items: center; gap: 22px; }
+      .tile .num { flex: 0 0 76px; height: 76px; border-radius: 22px; display: flex; align-items: center; justify-content: center; font: 900 38px/1 "Montserrat"; color: #1a1300; background: linear-gradient(135deg, var(--gold2), var(--gold)); }
+      .tile b { font: 800 38px/1.08 "Montserrat"; }
+      .tile .bar { position: absolute; left: 28px; right: 28px; bottom: 20px; height: 8px; border-radius: 8px; background: rgba(255,255,255,0.08); overflow: hidden; }
+      .tile .bar i { display: block; height: 100%; width: 0; border-radius: 8px; background: linear-gradient(90deg, var(--teal), var(--gold)); }
+      #wefSrc { position: absolute; left: 70px; right: 70px; top: 1305px; text-align: center; font: 600 24px/1 "Poppins"; color: var(--muted); letter-spacing: 0.06em; }
+
+      /* ---------- S5 3 tips ---------- */
+      #bigThree { position: absolute; left: 0; right: 0; top: 270px; text-align: center; font: 900 560px/1 "Montserrat"; color: var(--gold); text-shadow: 0 0 120px rgba(244,185,66,0.5); }
+      #tipsWord { position: absolute; left: 0; right: 0; top: 820px; text-align: center; font: 900 110px/1 "Montserrat"; letter-spacing: 0.04em; }
+      #tipsSub { position: absolute; left: 0; right: 0; top: 950px; text-align: center; }
+      .tp { position: absolute; top: 1080px; width: 290px; height: 220px; padding: 24px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
+      .tp .n { width: 70px; height: 70px; border-radius: 50%; background: var(--gold); color: #1a1300; display: flex; align-items: center; justify-content: center; font: 900 38px/1 "Montserrat"; }
+      .tp b { font: 800 31px/1.1 "Montserrat"; }
+
+      /* ---------- tips shared ---------- */
+      .tipHead { position: absolute; left: 70px; right: 70px; top: 290px; display: flex; align-items: center; gap: 28px; }
+      .tipNo { flex: 0 0 auto; padding: 18px 26px; border-radius: 26px; background: linear-gradient(135deg, var(--gold2), var(--gold)); color: #1a1300; text-align: center; }
+      .tipNo small { display: block; font: 800 22px/1 "Montserrat"; letter-spacing: 0.2em; }
+      .tipNo b { display: block; font: 900 84px/0.95 "Montserrat"; }
+      .tipHead h2 { font: 900 66px/1.02 "Montserrat"; letter-spacing: -0.01em; }
+      .tipHead h2 .g { color: var(--gold); }
+
+      /* S6 resume */
+      #resume { position: absolute; left: 170px; top: 560px; width: 740px; height: 760px; border-radius: 30px; background: #f7f4ec; color: #14203f; padding: 44px; box-shadow: 0 40px 100px rgba(0,0,0,0.55); }
+      #resume .top { display: flex; gap: 26px; align-items: center; margin-bottom: 34px; }
+      #resume .pf { width: 120px; height: 120px; border-radius: 50%; background: #d9dfee; }
+      #resume .ln { height: 22px; border-radius: 11px; background: #d9dfee; margin-bottom: 14px; }
+      .proof { display: flex; align-items: center; gap: 18px; margin-top: 22px; padding: 20px 22px; border-radius: 20px; background: #e9f8f2; border: 3px solid #31d0aa; font: 700 30px/1.15 "Poppins"; }
+      .proof .ic { flex-basis: 52px; height: 52px; font-size: 28px; }
+      .proof em { font-style: normal; color: #0c8f6f; font-weight: 800; }
+      #relStamp { position: absolute; right: 90px; top: 1150px; padding: 16px 30px; border: 8px solid var(--teal); border-radius: 18px; color: var(--teal); font: 900 58px/1 "Montserrat"; background: rgba(6, 30, 26, 0.85); transform: rotate(-8deg); opacity: 0; }
+
+      /* S7 interview */
+      .story { position: absolute; left: 110px; width: 860px; height: 116px; padding: 0 30px; display: flex; align-items: center; gap: 24px; }
+      .story .n { flex: 0 0 66px; height: 66px; border-radius: 50%; background: rgba(244,185,66,0.18); border: 3px solid var(--gold); color: var(--gold2); display: flex; align-items: center; justify-content: center; font: 900 32px/1 "Montserrat"; }
+      .story b { font: 800 44px/1 "Montserrat"; }
+      .story small { margin-left: auto; font: 600 26px/1 "Poppins"; color: var(--muted); }
+      #starTitle { position: absolute; left: 0; right: 0; top: 560px; text-align: center; font: 900 92px/1 "Montserrat"; letter-spacing: 0.06em; }
+      #starTitle .g { color: var(--gold); }
+      #starSub { position: absolute; left: 0; right: 0; top: 670px; text-align: center; }
+      .sl { position: absolute; top: 790px; width: 225px; height: 470px; border-radius: 32px; display: flex; flex-direction: column; align-items: center; padding-top: 34px; gap: 22px; }
+      .sl .L { width: 150px; height: 150px; border-radius: 30px; display: flex; align-items: center; justify-content: center; font: 900 110px/1 "Montserrat"; color: #1a1300; }
+      .sl b { font: 800 33px/1.05 "Montserrat"; text-align: center; }
+      .sl small { font: 600 25px/1.25 "Poppins"; color: var(--muted); text-align: center; padding: 0 14px; }
+
+      /* S8 portfolio */
+      #folder { position: absolute; left: 390px; top: 520px; width: 300px; height: 230px; }
+      .fld { position: absolute; width: 455px; height: 250px; padding: 30px; }
+      .fld .tag { display: inline-block; padding: 10px 18px; border-radius: 999px; font: 800 24px/1 "Montserrat"; letter-spacing: 0.1em; color: #1a1300; background: var(--gold); }
+      .fld b { display: block; margin-top: 22px; font: 800 40px/1.08 "Montserrat"; }
+      .fld small { display: block; margin-top: 10px; font: 600 25px/1.2 "Poppins"; color: var(--muted); }
+      #simple { position: absolute; left: 0; right: 0; top: 1330px; text-align: center; font: 800 34px/1 "Poppins"; color: var(--gold2); }
+
+      /* S9 ending */
+      #recapTitle { position: absolute; left: 70px; right: 70px; top: 300px; font: 900 76px/1.04 "Montserrat"; }
+      #recapTitle .g { color: var(--gold); }
+      .rc { position: absolute; left: 90px; width: 900px; height: 140px; padding: 0 36px; display: flex; align-items: center; gap: 28px; font: 800 46px/1 "Montserrat"; }
+      .rc .ic { flex: 0 0 76px; height: 76px; font-size: 44px; }
+      #equals { position: absolute; left: 90px; width: 900px; top: 1060px; height: 200px; border-radius: 36px; background: linear-gradient(90deg, var(--gold), var(--gold2)); color: #1a1300; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+      #equals small { font: 800 28px/1 "Montserrat"; letter-spacing: 0.25em; }
+      #equals b { margin-top: 10px; font: 900 72px/1 "Montserrat"; }
+      #endRing { position: absolute; left: 270px; top: 330px; width: 540px; height: 540px; border-radius: 50%; padding: 12px; background: conic-gradient(from 0deg, var(--gold), var(--gold2), var(--teal), var(--gold)); box-shadow: 0 0 120px rgba(244,185,66,0.45); }
+      #endRing .ph { width: 100%; height: 100%; border-radius: 50%; border: 10px solid var(--navy); background: url(assets/img/jannah.jpg) 50% 10% / 118% auto no-repeat #e8e6e0; }
+      #endName { position: absolute; left: 0; right: 0; top: 920px; text-align: center; font: 900 64px/1 "Montserrat"; letter-spacing: 0.04em; }
+      #endRole { position: absolute; left: 0; right: 0; top: 1000px; text-align: center; font: 600 32px/1 "Poppins"; color: var(--muted); letter-spacing: 0.12em; }
+      #endBig { position: absolute; left: 0; right: 0; top: 1110px; text-align: center; font: 900 112px/1 "Montserrat"; color: var(--gold); text-shadow: 0 0 60px rgba(244,185,66,0.5); }
+      #endCta { position: absolute; left: 0; right: 0; top: 1270px; text-align: center; font: 700 36px/1 "Poppins"; }
+      #endCta span { display: inline-block; padding: 18px 40px; border-radius: 999px; border: 3px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.06); }
+      #progress { position: absolute; left: 0; top: 0; height: 8px; width: 1080px; transform-origin: 0 50%; background: linear-gradient(90deg, var(--teal), var(--gold)); }
+
+      /* ===== TikTok safe-area layout (content y 240-1260, x 120-960) ===== */
+      .chip { top: 270px; left: 120px; padding: 12px 24px; font-size: 26px; }
+      .h1 { left: 120px; right: 120px; top: 360px; font-size: 68px; }
+      #badge { top: 244px; right: 120px; }
+      #badge .av { width: 72px; height: 72px; border-width: 3px; }
+      #badge .nm { font-size: 22px; }
+      #badge .nm small { font-size: 17px; }
+      #caps { left: 120px; right: 120px; top: 1140px; height: 120px; }
+      .cap { font-size: 56px; line-height: 1.1; }
+      #hookTitle { top: 350px; font-size: 96px; }
+      #hookTitle .big { font-size: 210px; }
+      #gauge, #gaugeBox { left: 260px !important; top: 770px !important; width: 560px !important; height: 344px !important; }
+      #gaugeNum { top: 128px; font-size: 118px; }
+      #gaugeLbl { top: 262px; font-size: 26px; }
+      #stamp { left: 200px; top: 870px; width: 680px; font-size: 96px; padding: 22px 0; border-width: 10px; }
+      #hookPhoto { left: 300px; top: 340px; width: 480px; height: 640px; }
+      #hookLower { left: 170px; top: 900px; width: 740px; padding: 22px 32px; }
+      #hookLower b { font-size: 50px; }
+      #hookLower span { font-size: 25px; }
+      .node { width: 270px; height: 270px; }
+      .node b { font-size: 40px; }
+      .node small { font-size: 23px; }
+      .node svg { transform: scale(0.85); }
+      #nodeA { left: 120px; top: 580px; }
+      #nodeB { left: 690px; right: auto; top: 580px; }
+      #bridge { left: 400px; top: 685px; width: 280px; }
+      #xmark { left: 480px; top: 655px; width: 120px; height: 120px; }
+      #probNote { left: 120px; right: 120px; top: 900px; padding: 26px; font-size: 32px; }
+      .col { top: 530px; width: 400px; height: 560px; padding: 28px 22px; }
+      #colA { left: 120px; }
+      #colB { left: 560px; right: auto; }
+      .col h3 { font-size: 32px; margin-bottom: 22px; }
+      .item { padding: 18px 16px; margin-bottom: 16px; font-size: 27px; gap: 14px; }
+      .ic { flex-basis: 50px; height: 50px; font-size: 28px; }
+      #neq { left: 485px; top: 770px; width: 110px; height: 110px; font-size: 86px; }
+      #wefHead { left: 120px; right: 120px; top: 350px; gap: 24px; }
+      #globe { flex-basis: 120px; height: 120px; }
+      #wefHead b { font-size: 44px; }
+      #wefHead span { font-size: 28px; }
+      #wefTitle { left: 120px; right: 120px; top: 500px; font-size: 54px; }
+      .tile { width: 400px; height: 140px; padding: 18px 22px; gap: 18px; }
+      .tile .num { flex-basis: 64px; height: 64px; font-size: 32px; border-radius: 18px; }
+      .tile b { font-size: 32px; }
+      .tile .bar { left: 22px; right: 22px; bottom: 14px; height: 6px; }
+      #wefSrc { left: 120px; right: 120px; top: 1110px; font-size: 20px; }
+      #bigThree { top: 250px; font-size: 470px; }
+      #tipsWord { top: 735px; font-size: 80px; }
+      #tipsSub { top: 835px; font-size: 30px; }
+      .tp { top: 900px; width: 260px; height: 190px; gap: 12px; }
+      .tp .n { width: 60px; height: 60px; font-size: 32px; }
+      .tp b { font-size: 28px; }
+      .tipHead { left: 120px; right: 120px; top: 340px; gap: 22px; }
+      .tipNo { padding: 14px 20px; border-radius: 22px; }
+      .tipNo small { font-size: 18px; }
+      .tipNo b { font-size: 68px; }
+      .tipHead h2 { font-size: 52px; }
+      #resume { left: 170px; top: 500px; width: 740px; height: 610px; padding: 34px 38px; }
+      #resume .top { margin-bottom: 22px; }
+      #resume .pf { width: 96px; height: 96px; }
+      .proof { margin-top: 16px; padding: 16px 18px; font-size: 27px; }
+      #relStamp { right: 150px; top: 540px; font-size: 48px; padding: 12px 24px; }
+      .story { left: 120px; width: 840px; height: 98px; padding: 0 26px; }
+      .story .n { flex-basis: 58px; height: 58px; font-size: 28px; }
+      .story b { font-size: 38px; }
+      .story small { font-size: 23px; }
+      #starTitle { top: 500px; font-size: 80px; }
+      #starSub { top: 600px; font-size: 30px; }
+      .sl { top: 670px; width: 195px; height: 400px; padding-top: 28px; gap: 18px; border-radius: 28px; }
+      .sl .L { width: 120px; height: 120px; font-size: 88px; border-radius: 26px; }
+      .sl b { font-size: 28px; }
+      .sl small { font-size: 22px; }
+      #folder { left: 440px; top: 490px; width: 200px; height: 153px; }
+      .fld { width: 400px; height: 190px; padding: 24px; }
+      .fld .tag { font-size: 20px; padding: 8px 14px; }
+      .fld b { margin-top: 16px; font-size: 34px; }
+      .fld small { font-size: 22px; }
+      #simple { top: 1085px; font-size: 30px; }
+      #recapTitle { left: 120px; right: 120px; top: 360px; font-size: 64px; }
+      .rc { left: 120px; width: 840px; height: 110px; font-size: 40px; padding: 0 30px; gap: 24px; }
+      .rc .ic { flex-basis: 64px; height: 64px; font-size: 36px; }
+      #equals { left: 120px; width: 840px; top: 930px; height: 170px; }
+      #equals small { font-size: 24px; }
+      #equals b { font-size: 62px; }
+      #endRing { left: 320px; top: 290px; width: 440px; height: 440px; }
+      #endName { top: 770px; font-size: 58px; }
+      #endRole { top: 845px; font-size: 28px; }
+      #endBig { top: 910px; font-size: 84px; white-space: nowrap; }
+      #endCta { top: 1030px; font-size: 30px; }
+      #endCta span { padding: 16px 34px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="62.8" data-width="1080" data-height="1920">
+
+      <!-- ================= BACKGROUND ================= -->
+      <div id="bg" class="clip" data-start="0" data-duration="62.8" data-track-index="0">
+        <svg id="pattern" viewBox="0 0 1480 2320">
+          <defs>
+            <pattern id="star8" width="160" height="160" patternUnits="userSpaceOnUse">
+              <g fill="none" stroke="#f4b942" stroke-width="2">
+                <rect x="40" y="40" width="80" height="80" />
+                <rect x="40" y="40" width="80" height="80" transform="rotate(45 80 80)" />
+                <circle cx="80" cy="80" r="20" />
+                <path d="M0 80 H40 M120 80 H160 M80 0 V40 M80 120 V160" />
+              </g>
+            </pattern>
+          </defs>
+          <rect width="1480" height="2320" fill="url(#star8)" />
+        </svg>
+        <div id="dots"></div>
+      </div>
+      <div id="vignette" class="clip" data-start="0" data-duration="62.8" data-track-index="1"></div>
+
+      <!-- ================= S1 HOOK ================= -->
+      <div id="s1" class="clip" data-start="0" data-duration="6.25" data-track-index="2">
+        <div class="chip kicker center-x" style="left:50%;top:270px"><span class="pip"></span>Realiti Fresh Grad</div>
+        <div id="hookTitle">
+          <div><span class="w big" id="hw1">CGPA</span></div>
+          <div><span class="w" id="hw2">SAHAJA</span> <span class="w" id="hw3">DAH</span></div>
+          <div><span class="w" id="hw4" style="color:var(--coral)">TAK CUKUP?</span></div>
+        </div>
+        <svg id="gauge" class="abs" viewBox="0 0 700 430">
+          <path d="M70 360 A280 280 0 0 1 630 360" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="44" stroke-linecap="round" />
+          <path id="gArc" d="M70 360 A280 280 0 0 1 630 360" fill="none" stroke="url(#gGrad)" stroke-width="44" stroke-linecap="round" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100" opacity="0" />
+          <defs><linearGradient id="gGrad" x1="0" x2="1"><stop offset="0" stop-color="#31d0aa" /><stop offset="1" stop-color="#f4b942" /></linearGradient></defs>
+        </svg>
+        <div id="gaugeBox" class="abs" style="left:190px;top:860px;width:700px;height:430px">
+          <div id="gaugeNum">0.00</div>
+          <div id="gaugeLbl">CGPA ANDA</div>
+        </div>
+        <div id="stamp">TAK CUKUP!</div>
+        <div id="hookPhoto"><img src="assets/img/jannah.jpg" alt="Nurul Jannah" /></div>
+        <div id="hookLower"><b>NURUL JANNAH</b><span>PERKONGSIAN KERJAYA</span></div>
+      </div>
+
+      <!-- ================= S2 PROBLEM ================= -->
+      <div id="s2" class="clip" data-start="5.9" data-duration="7.95" data-track-index="2">
+        <div class="chip coral"><span class="pip"></span>Masalahnya</div>
+        <div class="h1" id="s2t">Bila kita anggap <span class="g">CGPA</span> dah cukup&hellip;</div>
+        <div class="node" id="nodeA">
+          <svg width="120" height="90" viewBox="0 0 120 90"><path d="M60 8 L116 32 L60 56 L4 32 Z" fill="#f4b942" /><path d="M28 44 V66 Q60 84 92 66 V44 L60 58 Z" fill="#ffd77a" /><path d="M108 36 V62" stroke="#f4b942" stroke-width="5" /><circle cx="108" cy="66" r="6" fill="#f4b942" /></svg>
+          <b>CGPA</b><small>Tinggi</small>
+        </div>
+        <div class="node" id="nodeB">
+          <svg width="120" height="96" viewBox="0 0 120 96"><rect x="6" y="24" width="108" height="66" rx="12" fill="#31d0aa" /><path d="M40 24 V12 Q40 6 46 6 H74 Q80 6 80 12 V24" fill="none" stroke="#7ff0d2" stroke-width="7" /><rect x="6" y="46" width="108" height="8" fill="#0d3a33" /><rect x="52" y="42" width="16" height="16" rx="3" fill="#ffd77a" /></svg>
+          <b>ALAM<br />REALITI</b><small>Dunia sebenar</small>
+        </div>
+        <svg id="bridge" class="abs" viewBox="0 0 320 60">
+          <path id="brL" d="M0 30 H130" stroke="#f4b942" stroke-width="10" stroke-linecap="round" stroke-dasharray="4 18" pathLength="100" />
+          <path id="brR" d="M190 30 H320" stroke="#31d0aa" stroke-width="10" stroke-linecap="round" stroke-dasharray="4 18" />
+        </svg>
+        <svg id="xmark" class="abs" viewBox="0 0 140 140"><circle cx="70" cy="70" r="64" fill="#ff6b6b" /><path d="M45 45 L95 95 M95 45 L45 95" stroke="#2a0505" stroke-width="16" stroke-linecap="round" /></svg>
+        <div id="probNote" class="card sub">CGPA <b>bukan tiket automatik</b> ke dunia pekerjaan.</div>
+      </div>
+
+      <!-- ================= S3 REALITY ================= -->
+      <div id="s3" class="clip" data-start="13.6" data-duration="4.55" data-track-index="2">
+        <div class="chip teal"><span class="pip"></span>Realitinya</div>
+        <div class="h1">Alam kerja <span class="c">sangat berbeza</span></div>
+        <div class="col card" id="colA">
+          <h3>DALAM<br />KELAS</h3>
+          <div class="item a1"><span class="ic ok">✓</span>Ada silibus</div>
+          <div class="item a2"><span class="ic ok">✓</span>Ada rubrik</div>
+          <div class="item a3"><span class="ic ok">✓</span>Ada skema jawapan</div>
+        </div>
+        <div class="col card" id="colB">
+          <h3>ALAM<br />KERJA</h3>
+          <div class="item b1"><span class="ic bad">!</span>Client tukar permintaan</div>
+          <div class="item b2"><span class="ic bad">!</span>Deadline diawalkan</div>
+          <div class="item b3"><span class="ic bad">!</span>Semua <i>unexpected</i></div>
+        </div>
+        <div id="neq">≠</div>
+      </div>
+
+      <!-- ================= S4 WEF ================= -->
+      <div id="s4" class="clip" data-start="17.85" data-duration="13.75" data-track-index="2">
+        <div class="chip"><span class="pip"></span>Data &amp; Fakta</div>
+        <div id="wefHead">
+          <svg id="globe" viewBox="0 0 150 150"><circle cx="75" cy="75" r="66" fill="rgba(49,208,170,0.15)" stroke="#31d0aa" stroke-width="6" /><ellipse id="gMer" cx="75" cy="75" rx="30" ry="66" fill="none" stroke="#31d0aa" stroke-width="5" /><path d="M9 75 H141 M20 42 H130 M20 108 H130" stroke="#31d0aa" stroke-width="5" fill="none" /></svg>
+          <div><b>WORLD ECONOMIC FORUM</b><span>Future of Jobs Report <span id="yr">2023</span></span></div>
+        </div>
+        <div id="wefTitle">Skill yang paling <span class="g">dicari majikan</span></div>
+        <div class="tile card" id="k1" style="left:120px;top:650px"><div class="num">1</div><b>Analytical<br />Thinking</b><div class="bar"><i></i></div></div>
+        <div class="tile card" id="k2" style="left:560px;top:650px"><div class="num">2</div><b>Creative<br />Thinking</b><div class="bar"><i></i></div></div>
+        <div class="tile card" id="k3" style="left:120px;top:805px"><div class="num">3</div><b>Resilience</b><div class="bar"><i></i></div></div>
+        <div class="tile card" id="k4" style="left:560px;top:805px"><div class="num">4</div><b>Flexibility</b><div class="bar"><i></i></div></div>
+        <div class="tile card" id="k5" style="left:120px;top:960px"><div class="num">5</div><b>Motivation</b><div class="bar"><i></i></div></div>
+        <div class="tile card" id="k6" style="left:560px;top:960px"><div class="num">6</div><b>Lifelong<br />Learning</b><div class="bar"><i></i></div></div>
+        <div id="wefSrc">Sumber: World Economic Forum, Future of Jobs Report 2023</div>
+      </div>
+
+      <!-- ================= S5 3 TIPS ================= -->
+      <div id="s5" class="clip" data-start="31.5" data-duration="4.25" data-track-index="2">
+        <div id="bigThree">3</div>
+        <div id="tipsWord">TIPS PRAKTIKAL</div>
+        <div id="tipsSub" class="sub">untuk fresh grad yang sedang apply kerja</div>
+        <div class="tp card" id="tp1" style="left:120px"><div class="n">1</div><b>Resume<br />Berbukti</b></div>
+        <div class="tp card" id="tp2" style="left:410px"><div class="n">2</div><b>5 Cerita<br />Interview</b></div>
+        <div class="tp card" id="tp3" style="left:700px"><div class="n">3</div><b>Portfolio<br />Kecil</b></div>
+      </div>
+
+      <!-- ================= S6 TIP 1 ================= -->
+      <div id="s6" class="clip" data-start="35.45" data-duration="4.2" data-track-index="2">
+        <div class="tipHead"><div class="tipNo"><small>TIP</small><b>01</b></div><h2>Bina resume yang <span class="g">ada bukti</span></h2></div>
+        <div id="resume">
+          <div class="top"><div class="pf"></div><div style="flex:1"><div class="ln" style="width:70%;height:30px;background:#14203f"></div><div class="ln" style="width:45%"></div></div></div>
+          <div class="ln" style="width:92%"></div><div class="ln" style="width:80%"></div>
+          <div class="proof p1"><span class="ic ok">✓</span><span>Bentang projek kepada <em>40 orang</em></span></div>
+          <div class="proof p2"><span class="ic ok">✓</span><span>Naikkan engagement media sosial <em>+40%</em></span></div>
+          <div class="proof p3" style="background:#fdeaea;border-color:#ff6b6b;opacity:.95"><span class="ic bad">✗</span><span style="text-decoration:line-through;color:#8a4a4a">&ldquo;Saya ada good communication skill&rdquo;</span></div>
+        </div>
+        <div id="relStamp">RELEVAN ✓</div>
+      </div>
+
+      <!-- ================= S7 TIP 2 ================= -->
+      <div id="s7" class="clip" data-start="39.35" data-duration="9.55" data-track-index="2">
+        <div class="tipHead"><div class="tipNo"><small>TIP</small><b>02</b></div><h2>Sediakan <span class="g">5 cerita</span> interview</h2></div>
+        <div id="stories">
+          <div class="story card" id="st1" style="top:500px"><div class="n">1</div><b>Leadership</b><small>memimpin</small></div>
+          <div class="story card" id="st2" style="top:612px"><div class="n">2</div><b>Konflik</b><small>selesai isu</small></div>
+          <div class="story card" id="st3" style="top:724px"><div class="n">3</div><b>Failure</b><small>belajar dari gagal</small></div>
+          <div class="story card" id="st4" style="top:836px"><div class="n">4</div><b>Teamwork</b><small>kerja berpasukan</small></div>
+          <div class="story card" id="st5" style="top:948px"><div class="n">5</div><b>Problem Solving</b><small>cari jalan</small></div>
+        </div>
+        <div id="starTitle"><span class="g">★</span> STAR METHOD</div>
+        <div id="starSub" class="sub">Jawab soalan behavioral dengan tersusun</div>
+        <div class="sl card" id="sS" style="left:120px"><div class="L" style="background:#7fb2ff">S</div><b>Situation</b><small>Konteks</small></div>
+        <div class="sl card" id="sT" style="left:335px"><div class="L" style="background:#31d0aa">T</div><b>Task</b><small>Tugasan</small></div>
+        <div class="sl card" id="sA" style="left:550px"><div class="L" style="background:#f4b942">A</div><b>Action</b><small>Tindakan</small></div>
+        <div class="sl card" id="sR" style="left:765px"><div class="L" style="background:#ff6b6b">R</div><b>Result</b><small>Hasil</small></div>
+      </div>
+
+      <!-- ================= S8 TIP 3 ================= -->
+      <div id="s8" class="clip" data-start="48.9" data-duration="5.75" data-track-index="2">
+        <div class="tipHead"><div class="tipNo"><small>TIP</small><b>03</b></div><h2>Buat satu <span class="g">portfolio kecil</span></h2></div>
+        <svg id="folder" viewBox="0 0 300 230">
+          <path d="M10 40 Q10 20 30 20 H110 L135 45 H270 Q290 45 290 65 V200 Q290 220 270 220 H30 Q10 220 10 200 Z" fill="#c98f1f" />
+          <g id="paper"><rect x="45" y="30" width="210" height="150" rx="10" fill="#f7f4ec" /><rect x="70" y="60" width="120" height="12" rx="6" fill="#d9dfee" /><rect x="70" y="86" width="160" height="12" rx="6" fill="#d9dfee" /><rect x="70" y="112" width="90" height="12" rx="6" fill="#31d0aa" /></g>
+          <path id="flap" d="M10 85 Q10 70 28 70 H272 Q290 70 290 85 V200 Q290 220 270 220 H30 Q10 220 10 200 Z" fill="#f4b942" />
+        </svg>
+        <div class="fld card" id="f1" style="left:120px;top:660px"><span class="tag">MARKETING</span><b>Sampel campaign</b><small>idea + visual ringkas</small></div>
+        <div class="fld card" id="f2" style="left:560px;top:660px"><span class="tag">FINANCE</span><b>Analisis syarikat</b><small>ringkas &amp; padat</small></div>
+        <div class="fld card" id="f3" style="left:120px;top:870px"><span class="tag">HR</span><b>Onboarding plan</b><small>contoh pelan staf baru</small></div>
+        <div class="fld card" id="f4" style="left:560px;top:870px"><span class="tag">PENDIDIKAN</span><b>Sample lesson</b><small>bahan mengajar efektif</small></div>
+        <div id="simple">Simple pun takpe &mdash; asalkan ada bukti!</div>
+      </div>
+
+      <!-- ================= S9 ENDING ================= -->
+      <div id="s9" class="clip" data-start="54.65" data-duration="4.7" data-track-index="2">
+        <div class="chip teal"><span class="pip"></span>Ringkasan</div>
+        <div id="recapTitle">3 tips ni bantu anda <span class="g">menonjol</span></div>
+        <div class="rc card" id="r1" style="top:530px"><span class="ic ok">✓</span>Resume berbukti</div>
+        <div class="rc card" id="r2" style="top:660px"><span class="ic ok">✓</span>5 cerita + STAR</div>
+        <div class="rc card" id="r3" style="top:790px"><span class="ic ok">✓</span>Portfolio kecil</div>
+        <div id="equals"><small>HASILNYA</small><b>PRESENTABLE &amp; FIT</b></div>
+      </div>
+      <div id="s10" class="clip" data-start="59.1" data-duration="3.7" data-track-index="2">
+        <div id="endRing"><div class="ph"></div></div>
+        <div id="endName">NURUL JANNAH</div>
+        <div id="endRole">PERKONGSIAN KERJAYA</div>
+        <div id="endBig">SELAMAT MENCUBA!</div>
+        <div id="endCta"><span>Follow untuk tips kerjaya lagi</span></div>
+      </div>
+
+      <!-- ================= OVERLAYS ================= -->
+      <div id="badgeWrap" class="clip" data-start="5.9" data-duration="48.75" data-track-index="3">
+        <div id="badge"><div class="av"></div><div class="nm">Nurul Jannah<small>Perkongsian Kerjaya</small></div></div>
+      </div>
+      <div id="capLayer" class="clip" data-start="0" data-duration="60.3" data-track-index="4">
+        <div id="caps"></div>
+      </div>
+      <div id="progWrap" class="clip" data-start="0" data-duration="62.8" data-track-index="5"><div id="progress"></div></div>
+      <div id="flash" class="clip" data-start="0" data-duration="62.8" data-track-index="6"></div>
+
+      <!-- ================= AUDIO ================= -->
+      <audio id="voice" src="assets/audio/voice.wav" data-start="0.4" data-duration="62.4" data-track-index="10" data-volume="1"></audio>
+      <audio id="bgm" src="assets/audio/bgm.mp3" data-start="0" data-duration="62.8" data-track-index="11" data-volume="0.2" data-fade-in="0.5" data-fade-out="2.5"></audio>
+      <div id="sfx"></div>
+    </div>
+
+    <script>
+      // ---------------- data ----------------
+      const V = 0.4; // voice offset
+      const CAPS = [
+        [0.78, 1.45, "NAK *BERJAYA* ZAMAN SEKARANG?"],
+        [1.49, 3.06, "*CGPA* SAHAJA DAH"],
+        [3.09, 3.65, "*TAK CUKUP!*"],
+        [3.7, 4.62, "SEBAB APA?"],
+        [4.65, 5.4, "JOM KITA *SEMBANG*"],
+        [5.6, 6.66, "TAPI *MASALAH*"],
+        [6.68, 7.86, "MULA TIMBUL BILA"],
+        [7.88, 9.46, "KITA ANGGAP *CGPA*"],
+        [9.48, 10.2, "TU SUDAH"],
+        [10.28, 11.8, "UNTUK BAWA KITA"],
+        [11.88, 13.0, "KE ALAM *REALITI*"],
+        [13.27, 14.8, "*REALITINYA*"],
+        [14.87, 16.05, "ALAM PEKERJAAN"],
+        [16.07, 17.3, "SANGATLAH *BERBEZA*"],
+        [17.62, 19.3, "*WORLD ECONOMIC FORUM*"],
+        [19.38, 20.16, "DALAM FUTURE OF"],
+        [20.18, 21.8, "JOBS REPORT *2023*"],
+        [21.98, 23.16, "ADA SENARAIKAN"],
+        [23.18, 24.5, "BEBERAPA *SKILLS*"],
+        [24.71, 26.0, "*ANALYTICAL* THINKING"],
+        [26.11, 27.2, "*CREATIVE* THINKING"],
+        [27.31, 28.14, "*RESILIENCE*"],
+        [28.16, 28.92, "*FLEXIBILITY*"],
+        [28.96, 29.94, "*MOTIVATION* DAN"],
+        [29.96, 31.0, "*LIFELONG LEARNING*"],
+        [31.26, 32.64, "ANDA BOLEH CUBA"],
+        [32.66, 34.04, "*3 TIPS* PRAKTIKAL"],
+        [34.06, 35.0, "YANG ANDA BOLEH BUAT"],
+        [35.12, 36.7, "PERTAMA, BINA"],
+        [36.72, 37.5, "*RESUME* YANG"],
+        [37.52, 38.5, "ADA *BUKTI* YANG"],
+        [38.52, 39.0, "*RELEVANT*"],
+        [39.07, 41.4, "KE-2, SEDIAKAN *5*"],
+        [41.47, 42.65, "*INTERVIEW* SEBELUM"],
+        [42.67, 43.6, "APPLY KERJA"],
+        [43.8, 44.98, "BOLEH GUNA TEKNIK"],
+        [45.0, 45.66, "*STAR* METHOD"],
+        [45.68, 46.58, "S, *SITUATION*"],
+        [46.61, 48.0, "*TASK*, *ACTION* DAN"],
+        [48.02, 48.6, "*RESULT*"],
+        [48.68, 49.52, "KE-3, BUAT"],
+        [49.54, 51.3, "1 *PORTFOLIO* KECIL"],
+        [51.34, 52.32, "WALAUPUN BIDANG"],
+        [52.34, 52.92, "YANG ANDA NAK"],
+        [52.94, 54.2, "APPLY TU *SIMPLE* JE"],
+        [54.35, 55.53, "*3 TIPS* NI MEMBANTU"],
+        [55.55, 56.33, "ANDA UNTUK BE"],
+        [56.35, 57.13, "*PRESENTABLE* DAN"],
+        [57.15, 58.2, "SEEMS *FIT* DENGAN KERJA"],
+        [58.22, 58.6, "YANG KORANG"],
+        [58.62, 59.5, "TENGAH *APPLY*"],
+      ];
+      // [time(abs), file, volume]
+      const SFX = [
+        [0.0, "impact", 0.55], [0.05, "whoosh", 0.35],
+        [1.85, "pop", 0.5], [3.45, "impact", 0.75],
+        [4.35, "whoosh", 0.4], [4.5, "shimmer", 0.28],
+        [5.85, "whoosh", 0.38], [8.3, "pop", 0.5], [12.25, "pop", 0.5], [12.85, "whoosh_down", 0.45],
+        [13.55, "whoosh", 0.38], [14.1, "tick", 0.5], [14.4, "tick", 0.5], [14.7, "tick", 0.5],
+        [15.25, "tick", 0.5], [15.55, "tick", 0.5], [15.85, "tick", 0.5], [16.45, "impact", 0.4],
+        [17.8, "whoosh", 0.38], [18.05, "ding", 0.35],
+        [22.4, "pop", 0.4], [25.1, "pop", 0.5], [26.5, "pop", 0.5], [27.7, "pop", 0.5], [28.55, "pop", 0.5], [29.35, "pop", 0.5], [30.35, "pop", 0.5],
+        [29.6, "riser", 0.32], [31.55, "impact", 0.7],
+        [33.05, "pop", 0.45], [33.3, "pop", 0.45], [33.55, "pop", 0.45],
+        [35.4, "whoosh", 0.38], [36.95, "ding", 0.3], [37.9, "ding", 0.3], [38.9, "impact", 0.35],
+        [39.3, "whoosh", 0.38], [39.75, "tick", 0.5], [40.05, "tick", 0.5], [40.35, "tick", 0.5], [40.65, "tick", 0.5], [40.95, "tick", 0.5],
+        [44.1, "whoosh", 0.4], [45.4, "shimmer", 0.25],
+        [46.05, "pop", 0.5], [47.0, "pop", 0.5], [47.55, "pop", 0.5], [48.4, "pop", 0.5],
+        [48.85, "whoosh", 0.38], [50.0, "pop", 0.45],
+        [51.7, "tick", 0.5], [52.25, "tick", 0.5], [52.8, "tick", 0.5], [53.35, "tick", 0.5],
+        [54.6, "whoosh", 0.38], [54.85, "ding", 0.32], [55.4, "ding", 0.32], [55.95, "ding", 0.32], [56.75, "impact", 0.4],
+        [59.05, "whoosh", 0.4], [60.1, "shimmer", 0.35], [60.1, "impact", 0.35],
+      ];
+
+      // ---------------- build DOM ----------------
+      const sfxHost = document.getElementById("sfx");
+      const SFXLEN = { impact: 1.6, whoosh: 0.6, whoosh_down: 0.5, pop: 0.15, ding: 1.2, riser: 2.0, tick: 0.06, shimmer: 2.5 };
+      SFX.forEach(([t, f, v], i) => {
+        const a = document.createElement("audio");
+        a.id = "sfx" + i; a.src = "assets/audio/" + f + ".wav";
+        a.setAttribute("data-start", t.toFixed(2));
+        a.setAttribute("data-duration", Math.min(SFXLEN[f], 62.8 - t).toFixed(2));
+        a.setAttribute("data-volume", String(v));
+        a.setAttribute("data-track-index", String(12 + (i % 4)));
+        sfxHost.appendChild(a);
+      });
+      const capHost = document.getElementById("caps");
+      CAPS.forEach(([s, e, txt], i) => {
+        const d = document.createElement("div");
+        d.className = "cap"; d.id = "cap" + i;
+        d.innerHTML = txt.replace(/\*(.+?)\*/g, '<span class="hl">$1</span>');
+        capHost.appendChild(d);
+      });
+      // deterministic particles
+      const dotHost = document.getElementById("dots");
+      let seed = 1337; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+      const DOTS = [];
+      for (let i = 0; i < 26; i++) {
+        const d = document.createElement("div"); d.className = "dot";
+        const x = rnd() * 1080, y = rnd() * 1920, s = 0.3 + rnd() * 0.9;
+        d.style.left = x + "px"; d.style.top = y + "px"; d.style.opacity = (0.15 + rnd() * 0.45).toFixed(2);
+        d.style.transform = `scale(${s.toFixed(2)})`;
+        dotHost.appendChild(d); DOTS.push({ d, sp: 40 + rnd() * 90, sw: 20 + rnd() * 40 });
+      }
+
+      // ---------------- timeline ----------------
+      const tl = gsap.timeline({ paused: true });
+      const T = (x) => x + V; // dialogue time -> film time
+      const pop = (sel, at, extra = {}) => tl.fromTo(sel, { scale: 0.6, opacity: 0, y: 30 }, { scale: 1, opacity: 1, y: 0, duration: 0.45, ease: "back.out(2.2)", ...extra }, at);
+      const slideUp = (sel, at, d = 0.55) => tl.fromTo(sel, { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: d, ease: "power3.out" }, at);
+      const out = (sel, at, d = 0.3) => tl.to(sel, { opacity: 0, scale: 0.96, duration: d, ease: "power2.in" }, at);
+      const flash = (at, o = 0.5) => tl.fromTo("#flash", { opacity: o }, { opacity: 0, duration: 0.35, ease: "power2.out" }, at);
+
+      // background drift
+      tl.fromTo("#pattern", { x: 0, y: 0, rotation: 0 }, { x: -160, y: -160, rotation: 4, duration: 62.8, ease: "none" }, 0);
+      DOTS.forEach(({ d, sp, sw }, i) => tl.fromTo(d, { y: 0, x: 0 }, { y: -sp * 6, x: (i % 2 ? 1 : -1) * sw, duration: 62.8, ease: "none" }, 0));
+      tl.fromTo("#progress", { scaleX: 0 }, { scaleX: 1, duration: 62.8, ease: "none" }, 0);
+
+      // ---- S1 hook
+      flash(0, 0.8);
+      tl.fromTo("#s1 .kicker", { y: -40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 0.1);
+      tl.fromTo("#hw1", { scale: 2.6, opacity: 0, filter: "blur(18px)" }, { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.55, ease: "expo.out" }, T(1.45));
+      tl.fromTo("#hw2", { y: 50, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, T(2.1));
+      tl.fromTo("#hw3", { y: 50, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, T(2.55));
+      tl.fromTo("#hw4", { scale: 1.8, opacity: 0, rotation: -6 }, { scale: 1, opacity: 1, rotation: 0, duration: 0.4, ease: "back.out(2)" }, T(3.05));
+      // first 1.4s: teaser line before CGPA lands
+      tl.fromTo(["#gauge", "#gaugeBox"], { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 0.25);
+      tl.set("#gArc", { opacity: 1 }, 0.5);
+      tl.fromTo("#gArc", { attr: { "stroke-dashoffset": 100 } }, { attr: { "stroke-dashoffset": 2 }, duration: 2.6, ease: "power2.out" }, 0.5);
+      const g = { v: 0 };
+      tl.fromTo(g, { v: 0 }, { v: 3.95, duration: 2.6, ease: "power2.out", onUpdate: () => { document.getElementById("gaugeNum").textContent = g.v.toFixed(2); } }, 0.5);
+      tl.fromTo("#stamp", { scale: 2.4, opacity: 0, rotation: -14 }, { scale: 1, opacity: 1, rotation: -8, duration: 0.32, ease: "power4.in" }, T(3.0));
+      tl.fromTo(["#gauge", "#gaugeBox"], { x: 0 }, { x: 14, duration: 0.05, repeat: 7, yoyo: true, ease: "none" }, T(3.32));
+      tl.to(["#gauge", "#gaugeBox"], { opacity: 0.12, duration: 0.15 }, T(3.3));
+      flash(T(3.32), 0.35);
+      tl.to(["#gauge", "#gaugeBox", "#stamp"], { opacity: 0, y: 80, duration: 0.35, ease: "power2.in" }, T(3.85));
+      tl.to(["#s1 .kicker"], { opacity: 0, duration: 0.3 }, T(3.85));
+      tl.to("#hookTitle", { opacity: 0, scale: 0.9, duration: 0.35, ease: "power2.in" }, T(3.85));
+      tl.fromTo("#hookPhoto", { opacity: 0, y: 160, scale: 0.85, rotation: 4 }, { opacity: 1, y: 0, scale: 1, rotation: 0, duration: 0.7, ease: "power4.out" }, T(3.95));
+      tl.fromTo("#hookLower", { opacity: 0, x: -120 }, { opacity: 1, x: 0, duration: 0.5, ease: "power3.out" }, T(4.35));
+      out("#s1", 5.9, 0.35);
+
+      // ---- S2 problem
+      tl.fromTo("#s2 .chip", { x: -60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.45, ease: "power3.out" }, 6.0);
+      slideUp("#s2t", 6.2);
+      pop("#nodeA", T(7.9));
+      tl.fromTo("#nodeA", { rotation: -8 }, { rotation: 0, duration: 0.6, ease: "power2.out" }, T(7.9));
+      tl.fromTo("#brL", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.6, ease: "power2.out" }, T(10.3));
+      pop("#nodeB", T(11.85));
+      tl.fromTo("#brR", { opacity: 0, x: 30 }, { opacity: 1, x: 0, duration: 0.5, ease: "power2.out" }, T(12.0));
+      tl.fromTo("#xmark", { scale: 0, opacity: 0, rotation: -90 }, { scale: 1, opacity: 1, rotation: 0, duration: 0.45, ease: "back.out(2.5)" }, 12.85);
+      tl.to("#brR", { y: 70, rotation: 18, opacity: 0.3, duration: 0.5, ease: "power2.in" }, 12.95);
+      slideUp("#probNote", 12.6, 0.5);
+      out("#s2", 13.6, 0.3);
+
+      // ---- S3 reality
+      tl.fromTo("#s3 .chip", { x: -60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 13.65);
+      slideUp("#s3 .h1", 13.75, 0.45);
+      tl.fromTo("#colA", { x: -200, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 13.85);
+      tl.fromTo("#colB", { x: 200, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 13.95);
+      ["a1", "a2", "a3", "b1", "b2", "b3"].forEach((c, i) => tl.fromTo("#s3 ." + c, { x: i < 3 ? -40 : 40, opacity: 0 }, { x: 0, opacity: 1, duration: 0.35, ease: "power2.out" }, [14.1, 14.4, 14.7, 15.25, 15.55, 15.85][i]));
+      tl.fromTo("#neq", { scale: 0, rotation: -180 }, { scale: 1, rotation: 0, duration: 0.5, ease: "back.out(2)" }, 16.4);
+      tl.to("#neq", { scale: 1.18, duration: 0.25, yoyo: true, repeat: 1, ease: "power1.inOut" }, 16.95);
+      out("#s3", 17.85, 0.3);
+
+      // ---- S4 WEF
+      tl.fromTo("#s4 .chip", { x: -60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 17.9);
+      tl.fromTo("#wefHead", { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55, ease: "power3.out" }, 18.0);
+      tl.fromTo("#globe", { rotation: -90, scale: 0.5 }, { rotation: 0, scale: 1, duration: 0.8, ease: "back.out(1.6)" }, 18.0);
+      tl.fromTo("#gMer", { attr: { rx: 66 } }, { attr: { rx: 8 }, duration: 1.2, repeat: 9, yoyo: true, ease: "sine.inOut" }, 18.2);
+      tl.fromTo("#yr", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4, ease: "back.out(2)" }, T(20.2));
+      slideUp("#wefTitle", 22.35, 0.5);
+      [24.71, 26.11, 27.31, 28.16, 28.96, 29.96].forEach((t, i) => {
+        pop("#k" + (i + 1), T(t) - 0.05);
+        tl.fromTo(`#k${i + 1} .bar i`, { width: "0%" }, { width: (100 - i * 8) + "%", duration: 0.9, ease: "power2.out" }, T(t) + 0.15);
+      });
+      tl.fromTo("#wefSrc", { opacity: 0 }, { opacity: 1, duration: 0.5 }, 22.6);
+      tl.to(["#k1", "#k2", "#k3", "#k4", "#k5", "#k6"], { scale: 1.04, duration: 0.18, yoyo: true, repeat: 1, stagger: 0.06, ease: "power1.inOut" }, 30.75);
+      out("#s4", 31.45, 0.25);
+
+      // ---- S5 3 tips
+      tl.fromTo("#bigThree", { scale: 3, opacity: 0, filter: "blur(20px)" }, { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.55, ease: "expo.out" }, 31.5);
+      flash(31.55, 0.45);
+      tl.fromTo("#tipsWord", { scaleX: 1.5, opacity: 0 }, { scaleX: 1, opacity: 1, duration: 0.6, ease: "power3.out" }, T(32.66));
+      slideUp("#tipsSub", T(33.0), 0.45);
+      pop("#tp1", 33.05); pop("#tp2", 33.3); pop("#tp3", 33.55);
+      tl.to("#bigThree", { scale: 1.06, duration: 1.6, ease: "sine.inOut" }, 33.6);
+      out("#s5", 35.45, 0.25);
+
+      // ---- S6 tip 1
+      tl.fromTo("#s6 .tipHead", { x: -120, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 35.5);
+      tl.fromTo("#resume", { y: 300, opacity: 0, rotation: 6 }, { y: 0, opacity: 1, rotation: -1.5, duration: 0.7, ease: "power4.out" }, 35.7);
+      tl.fromTo("#s6 .p1", { x: -60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.35, ease: "back.out(2)" }, 36.95);
+      tl.fromTo("#s6 .p2", { x: -60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.35, ease: "back.out(2)" }, 37.9);
+      tl.fromTo("#s6 .p3", { x: -60, opacity: 0 }, { x: 0, opacity: 0.95, duration: 0.35, ease: "power2.out" }, 38.3);
+      tl.fromTo("#relStamp", { scale: 2.5, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: "power4.in" }, 38.65);
+      out("#s6", 39.35, 0.25);
+
+      // ---- S7 tip 2
+      tl.fromTo("#s7 .tipHead", { x: -120, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 39.4);
+      [39.75, 40.05, 40.35, 40.65, 40.95].forEach((t, i) => tl.fromTo("#st" + (i + 1), { x: 200, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, t));
+      tl.to("#stories", { opacity: 0, y: -60, duration: 0.4, ease: "power2.in" }, 43.95);
+      tl.fromTo("#starTitle", { scale: 0.4, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.55, ease: "back.out(1.8)" }, 44.25);
+      tl.fromTo("#starTitle .g", { rotation: -180 }, { rotation: 0, duration: 0.8, ease: "power3.out" }, 44.25);
+      slideUp("#starSub", 44.5, 0.45);
+      [["#sS", 46.05], ["#sT", 47.0], ["#sA", 47.55], ["#sR", 48.4]].forEach(([s, t]) => {
+        tl.fromTo(s, { y: 120, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "back.out(1.8)" }, t);
+        tl.fromTo(s + " .L", { rotationY: 90 }, { rotationY: 0, duration: 0.45, ease: "power2.out" }, t + 0.05);
+      });
+      out("#s7", 48.9, 0.25);
+
+      // ---- S8 tip 3
+      tl.fromTo("#s8 .tipHead", { x: -120, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 48.95);
+      pop("#folder", 49.3);
+      tl.fromTo("#paper", { y: 40 }, { y: -40, duration: 0.6, ease: "back.out(2)" }, 50.0);
+      [["#f1", 51.7], ["#f2", 52.25], ["#f3", 52.8], ["#f4", 53.35]].forEach(([s, t]) => pop(s, t));
+      slideUp("#simple", 53.4, 0.45);
+      out("#s8", 54.65, 0.25);
+
+      // ---- S9 recap
+      tl.fromTo("#s9 .chip", { x: -60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 54.7);
+      slideUp("#recapTitle", 54.75, 0.45);
+      [["#r1", 54.85], ["#r2", 55.4], ["#r3", 55.95]].forEach(([s, t]) => {
+        tl.fromTo(s, { x: -160, opacity: 0 }, { x: 0, opacity: 1, duration: 0.45, ease: "power3.out" }, t);
+        tl.fromTo(s + " .ic", { scale: 0 }, { scale: 1, duration: 0.35, ease: "back.out(3)" }, t + 0.15);
+      });
+      tl.fromTo("#equals", { scale: 0.5, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.5, ease: "back.out(2)" }, 56.7);
+      tl.to("#equals", { scale: 1.04, duration: 0.6, yoyo: true, repeat: 2, ease: "sine.inOut" }, 57.3);
+      out("#s9", 58.8, 0.3);
+
+      // ---- S10 end card
+      tl.fromTo("#endRing", { scale: 0.3, opacity: 0, rotation: -40 }, { scale: 1, opacity: 1, rotation: 0, duration: 0.8, ease: "back.out(1.6)" }, 59.15);
+      slideUp("#endName", 59.5, 0.5);
+      slideUp("#endRole", 59.7, 0.5);
+      tl.fromTo("#endBig", { scale: 0.5, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.5, ease: "back.out(2.4)" }, T(59.7));
+      flash(T(59.7), 0.3);
+      slideUp("#endCta", 60.6, 0.5);
+      tl.to("#endRing", { scale: 1.03, duration: 0.9, yoyo: true, repeat: 1, ease: "sine.inOut" }, 60.8);
+      tl.to(["#s10", "#bg"], { opacity: 0, duration: 0.6, ease: "power2.in" }, 62.2);
+
+      // ---- badge
+      tl.fromTo("#badge", { x: 80, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 6.1);
+      tl.to("#badge", { x: 80, opacity: 0, duration: 0.3, ease: "power2.in" }, 54.3);
+
+      // ---- captions
+      CAPS.forEach(([s, e], i) => {
+        const el = "#cap" + i, a = T(s), b = T(e);
+        tl.fromTo(el, { opacity: 0, scale: 0.8, y: 18 }, { opacity: 1, scale: 1, y: 0, duration: 0.14, ease: "back.out(2.5)" }, a);
+        tl.to(el, { opacity: 0, duration: 0.08, ease: "none" }, Math.max(a + 0.16, b - 0.04));
+      });
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>
