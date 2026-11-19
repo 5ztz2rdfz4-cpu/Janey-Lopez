@@ -1,0 +1,728 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Wanita Muda & Politik</title>
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style></head>
+<body><canvas id="c" width="1080" height="1920"></canvas>
+<script>
+// =====================================================================
+//  WANITA MUDA & POLITIK — 90s animated infographic documentary
+//  Deterministic renderer: draw(t) paints frame at time t (seconds).
+//  Timings come from build/timeline.json (original speaker audio edit).
+// =====================================================================
+const W = 1080, H = 1920;
+const cv = document.getElementById('c'), X = cv.getContext('2d');
+const C = {
+  n0: '#040A16', n1: '#081731', n2: '#0E2448', n3: '#17386B', n4: '#24508F',
+  gold: '#D8B25A', gold2: '#F4D58D', goldD: '#9C7A2E',
+  lb: '#8CC4F0', lb2: '#CFE7FB', white: '#FFFFFF', ink: '#0A1A33',
+  skin: ['#EBC39E', '#D9A77C', '#C08A5E', '#F1D1B4', '#A8744B'],
+};
+const FD = '"Inter Display", Inter, sans-serif', FS = 'Caladea, "DejaVu Serif", serif';
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const ease = t => (t = clamp(t), t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const eOut = t => 1 - Math.pow(1 - clamp(t), 3);
+const eBack = t => { t = clamp(t); const c1 = 1.5, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+const P = (t, t0, d) => clamp((t - t0) / d);
+const fade = (t, a, b, fi = .4, fo = .4) => Math.min(P(t, a, fi), 1 - P(t, b - fo, fo));
+function rng(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
+
+// offscreen layers for scenes (so transitions can scale/fade a whole scene)
+function mk() { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; }
+const LA = mk(), LB = mk();
+
+// ---------------- primitives ----------------
+function rr(c, x, y, w, h, r) { c.beginPath(); c.roundRect(x, y, w, h, r); }
+function glow(c, x, y, r, col, a = 1) {
+  const g = c.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)');
+  c.save(); c.globalAlpha *= a; c.fillStyle = g; c.fillRect(x - r, y - r, 2 * r, 2 * r); c.restore();
+}
+function text(c, s, x, y, o = {}) {
+  const { size = 60, weight = 800, color = C.white, align = 'center', font = FD, ls = 0, a = 1, base = 'alphabetic', shadow = 0, italic = false } = o;
+  c.save(); c.globalAlpha *= a;
+  c.font = `${italic ? 'italic ' : ''}${weight} ${size}px ${font}`; c.textAlign = align; c.textBaseline = base;
+  c.letterSpacing = ls + 'px'; c.fillStyle = color;
+  if (shadow) { c.shadowColor = 'rgba(0,0,0,.55)'; c.shadowBlur = shadow; c.shadowOffsetY = shadow / 4; }
+  c.fillText(s, x, y); c.restore();
+}
+function measure(c, s, size, weight = 800, font = FD, ls = 0) {
+  c.save(); c.font = `${weight} ${size}px ${font}`; c.letterSpacing = ls + 'px'; const w = c.measureText(s).width; c.restore(); return w;
+}
+// kinetic headline: words [{w,col}] laid out centred, wrapped to maxW; each word rises in at its own time
+function kinetic(c, words, cx, y, o = {}) {
+  const { size = 92, weight = 900, lh = 1.08, maxW = 940, t = 0, ls = -1, font = FD, a = 1, align = 'center' } = o;
+  const sp = measure(c, ' ', size, weight, font, ls);
+  const lines = [[]]; let lw = 0;
+  for (const wd of words) {
+    const w = measure(c, wd.w, size, weight, font, ls);
+    if (lw + w > maxW && lines[lines.length - 1].length) { lines.push([]); lw = 0; }
+    lines[lines.length - 1].push({ ...wd, width: w }); lw += w + sp;
+  }
+  lines.forEach((ln, li) => {
+    const tot = ln.reduce((s, q) => s + q.width, 0) + sp * (ln.length - 1);
+    let x = align === 'center' ? cx - tot / 2 : cx;
+    const yy = y + li * size * lh;
+    for (const wd of ln) {
+      const p = eOut(P(t, wd.t, .45));
+      if (p > 0) {
+        c.save(); c.beginPath(); c.rect(x - 20, yy - size * 1.05, wd.width + 40, size * 1.35); c.clip();
+        text(c, wd.w, x, yy + (1 - p) * size * .9, { size, weight, color: wd.col || C.white, align: 'left', ls, a: a * p, font, italic: wd.it });
+        c.restore();
+        if (wd.ul) { // gold underline sweep
+          const q = eOut(P(t, wd.t + .3, .5));
+          c.save(); c.globalAlpha *= a; c.fillStyle = C.gold; c.fillRect(x, yy + size * .16, wd.width * q, Math.max(4, size * .06)); c.restore();
+        }
+      }
+      x += wd.width + sp;
+    }
+  });
+  return lines.length * size * lh;
+}
+const W_ = (s, t0, dt = .09, col, extra = {}) => s.split(' ').map((w, i) => ({ w, t: t0 + i * dt, col, ...extra }));
+
+function kicker(c, s, x, y, t, t0, col = C.gold, a = 1) { // small label with line
+  const p = eOut(P(t, t0, .5)); if (p <= 0) return;
+  const w = measure(c, s, 30, 700, FD, 6);
+  c.save(); c.globalAlpha *= a * p;
+  c.fillStyle = col; c.fillRect(x - w / 2 - 70 * p, y - 11, 46 * p, 3); c.fillRect(x + w / 2 + 24, y - 11, 46 * p, 3);
+  c.restore();
+  text(c, s, x, y, { size: 30, weight: 700, color: col, ls: 6, a: a * p });
+}
+
+// ---------------- illustrations ----------------
+// Woman bust (flat vector, respectful, no facial detail). origin = bottom-centre of shoulders
+function bust(c, x, y, s, o = {}) {
+  const { hijab = C.n4, top = '#F3F5F9', jacket = C.n3, skin = C.skin[0], hair = null, a = 1, rim = 0 } = o;
+  c.save(); c.translate(x, y); c.scale(s, s); c.globalAlpha *= a;
+  // body / blazer
+  c.fillStyle = jacket; c.beginPath();
+  c.moveTo(-135, 0); c.bezierCurveTo(-135, -70, -110, -105, -60, -112); c.lineTo(60, -112); c.bezierCurveTo(110, -105, 135, -70, 135, 0); c.closePath(); c.fill();
+  c.fillStyle = top; c.beginPath(); c.moveTo(-34, -112); c.lineTo(0, -10); c.lineTo(34, -112); c.closePath(); c.fill();
+  if (hijab) {
+    c.fillStyle = hijab; c.beginPath(); // drape
+    c.moveTo(-64, -190); c.bezierCurveTo(-92, -120, -86, -70, -40, -52); c.quadraticCurveTo(0, -40, 40, -52);
+    c.bezierCurveTo(86, -70, 92, -120, 64, -190); c.closePath(); c.fill();
+    c.beginPath(); c.ellipse(0, -205, 66, 74, 0, 0, Math.PI * 2); c.fill();
+    c.fillStyle = skin; c.beginPath(); c.ellipse(0, -192, 40, 50, 0, 0, Math.PI * 2); c.fill();
+    c.fillStyle = hijab; c.beginPath(); c.ellipse(0, -246, 50, 22, 0, 0, Math.PI * 2); c.fill(); // brow line of scarf
+  } else {
+    c.fillStyle = hair || '#2B1B14';
+    c.beginPath(); c.ellipse(0, -200, 58, 66, 0, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.moveTo(-58, -200); c.quadraticCurveTo(-70, -120, -50, -100); c.lineTo(50, -100); c.quadraticCurveTo(70, -120, 58, -200); c.fill();
+    c.fillStyle = skin; c.fillRect(-16, -150, 32, 40);
+    c.beginPath(); c.ellipse(0, -190, 40, 50, 0, 0, Math.PI * 2); c.fill();
+    c.fillStyle = hair || '#2B1B14'; c.beginPath(); c.ellipse(-6, -236, 46, 20, -.25, 0, Math.PI * 2); c.fill();
+  }
+  if (rim) { // gold rim light on right edge
+    c.globalCompositeOperation = 'source-atop';
+    const g = c.createLinearGradient(40, 0, 140, 0); g.addColorStop(0, 'rgba(244,213,141,0)'); g.addColorStop(1, `rgba(244,213,141,${rim})`);
+    c.fillStyle = g; c.fillRect(-150, -300, 300, 310);
+  }
+  c.restore();
+}
+// full figure; origin = feet. walk = phase (radians) or null
+function figure(c, x, y, h, o = {}) {
+  const { hijab = C.n4, body = C.n3, skirt = null, skin = C.skin[0], walk = null, a = 1, sil = null, bag = false, child = false } = o;
+  const s = h / 400; c.save(); c.translate(x, y); c.scale(s, s); c.globalAlpha *= a;
+  const col = k => sil || k;
+  const sw = walk == null ? 0 : Math.sin(walk);
+  // legs
+  c.strokeStyle = col('#1B2232'); c.lineWidth = 26; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(-14, -170); c.lineTo(-14 + sw * 34, -10); c.moveTo(14, -170); c.lineTo(14 - sw * 34, -10); c.stroke();
+  // body (long coat / baju kurung)
+  c.fillStyle = col(body); c.beginPath();
+  c.moveTo(-46, -300); c.quadraticCurveTo(-58, -200, -70, -120); c.lineTo(70, -120); c.quadraticCurveTo(58, -200, 46, -300); c.closePath(); c.fill();
+  if (skirt) { c.fillStyle = col(skirt); c.beginPath(); c.moveTo(-62, -130); c.lineTo(-78, -40); c.lineTo(78, -40); c.lineTo(62, -130); c.fill(); }
+  // arms
+  c.strokeStyle = col(body); c.lineWidth = 24;
+  c.beginPath(); c.moveTo(-42, -290); c.lineTo(-56 - sw * 18, -175); c.moveTo(42, -290); c.lineTo(56 + sw * 18, -175); c.stroke();
+  if (bag) { c.fillStyle = col(C.gold); rr(c, 52 + sw * 18, -180, 40, 46, 6); c.fill(); }
+  // head + hijab
+  if (hijab) {
+    c.fillStyle = col(hijab); c.beginPath(); c.moveTo(-40, -340); c.quadraticCurveTo(-58, -280, -50, -262); c.lineTo(50, -262); c.quadraticCurveTo(58, -280, 40, -340); c.fill();
+    c.beginPath(); c.arc(0, -350, 40, 0, Math.PI * 2); c.fill();
+    if (!sil) { c.fillStyle = skin; c.beginPath(); c.ellipse(0, -344, 24, 29, 0, 0, Math.PI * 2); c.fill(); }
+  } else {
+    c.fillStyle = col('#2B1B14'); c.beginPath(); c.arc(0, -352, 38, 0, Math.PI * 2); c.fill();
+    if (!sil) { c.fillStyle = skin; c.beginPath(); c.ellipse(0, -342, 25, 30, 0, 0, Math.PI * 2); c.fill(); }
+  }
+  c.restore();
+}
+function person(c, x, y, s, col, a = 1) { // simple icon person
+  c.save(); c.globalAlpha *= a; c.fillStyle = col; c.translate(x, y); c.scale(s, s);
+  c.beginPath(); c.arc(0, -62, 18, 0, Math.PI * 2); c.fill();
+  c.beginPath(); c.moveTo(-30, 0); c.quadraticCurveTo(-30, -38, 0, -40); c.quadraticCurveTo(30, -38, 30, 0); c.fill();
+  c.restore();
+}
+function womanIcon(c, x, y, s, col, a = 1) {
+  c.save(); c.globalAlpha *= a; c.fillStyle = col; c.translate(x, y); c.scale(s, s);
+  c.beginPath(); c.arc(0, -64, 20, 0, Math.PI * 2); c.fill();
+  c.beginPath(); c.moveTo(-20, -66); c.quadraticCurveTo(-26, -40, -34, 0); c.lineTo(34, 0); c.quadraticCurveTo(26, -40, 20, -66); c.fill();
+  c.restore();
+}
+// Parliament-inspired silhouette: tall finned tower + long podium with serrated pyramid roofs
+function parliament(c, cx, by, s, o = {}) {
+  const { reveal = 1, fill = C.n2, line = C.gold, lights = 0, a = 1, lw = 3 } = o;
+  c.save(); c.globalAlpha *= a; c.translate(cx, by); c.scale(s, s);
+  const topY = -640;
+  c.beginPath(); c.rect(-560, topY + (1 - reveal) * 700 - 10, 1120, 720); c.clip();
+  // tower
+  const tx = 90, tw = 190, th = 600;
+  c.fillStyle = fill; c.fillRect(tx, -th, tw, th);
+  c.strokeStyle = line; c.lineWidth = lw; c.strokeRect(tx, -th, tw, th);
+  c.globalAlpha *= .55; c.lineWidth = lw * .6;
+  for (let i = 1; i < 10; i++) { c.beginPath(); c.moveTo(tx + i * tw / 10, -th + 14); c.lineTo(tx + i * tw / 10, -150); c.stroke(); }
+  for (let j = 1; j < 17; j++) { c.beginPath(); c.moveTo(tx, -th + j * 28); c.lineTo(tx + tw, -th + j * 28); c.stroke(); }
+  c.globalAlpha /= .55;
+  if (lights > 0) { const r = rng(7); for (let j = 1; j < 16; j++) for (let i = 0; i < 10; i++) if (r() < .35) { c.fillStyle = `rgba(244,213,141,${lights * (.4 + r() * .6)})`; c.fillRect(tx + i * tw / 10 + 4, -th + j * 28 + 6, tw / 10 - 8, 14); } }
+  // podium
+  const pw = 1000, ph = 150;
+  c.fillStyle = fill; c.fillRect(-pw / 2, -ph, pw, ph); c.lineWidth = lw; c.strokeRect(-pw / 2, -ph, pw, ph);
+  const n = 11, rw = pw / n;
+  for (let i = 0; i < n; i++) {
+    const x0 = -pw / 2 + i * rw; c.beginPath(); c.moveTo(x0, -ph); c.lineTo(x0 + rw / 2, -ph - 58); c.lineTo(x0 + rw, -ph); c.closePath(); c.fill(); c.stroke();
+  }
+  c.globalAlpha *= .5; for (let i = 0; i < 24; i++) { const x0 = -pw / 2 + 20 + i * (pw - 40) / 23; c.beginPath(); c.moveTo(x0, -ph + 20); c.lineTo(x0, -10); c.stroke(); }
+  if (lights > 0) { c.globalAlpha = a * lights * .9; c.fillStyle = C.gold2; for (let i = 0; i < 23; i++) { c.fillRect(-pw / 2 + 26 + i * (pw - 40) / 23, -ph + 30, 30, 90); } }
+  c.restore();
+  if (reveal < 1 && reveal > 0) { // scanning line
+    const y = by + s * (topY + (1 - reveal) * 700 - 10);
+    c.save(); c.globalAlpha *= a; const g = c.createLinearGradient(cx - 600 * s, 0, cx + 600 * s, 0);
+    g.addColorStop(0, 'rgba(140,196,240,0)'); g.addColorStop(.5, 'rgba(140,196,240,.9)'); g.addColorStop(1, 'rgba(140,196,240,0)');
+    c.fillStyle = g; c.fillRect(cx - 600 * s, y - 2, 1200 * s, 4); c.restore();
+  }
+}
+// ---- icons (centred at 0,0, ~100px box), stroke-based ----
+function icon(c, kind, x, y, s, col = C.gold, a = 1, lw = 7) {
+  c.save(); c.translate(x, y); c.scale(s, s); c.globalAlpha *= a;
+  c.strokeStyle = col; c.fillStyle = col; c.lineWidth = lw; c.lineCap = 'round'; c.lineJoin = 'round';
+  const L = (pts, close) => { c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(...p) : c.moveTo(...p)); if (close) c.closePath(); c.stroke(); };
+  switch (kind) {
+    case 'people': person(c, -28, 40, .9, col); person(c, 28, 40, .9, col); person(c, 0, 48, 1.05, col); break;
+    case 'bulb': c.beginPath(); c.arc(0, -12, 30, Math.PI * .8, Math.PI * 2.2); c.stroke(); L([[-14, 20], [-14, 34], [14, 34], [14, 20]]); L([[-10, 46], [10, 46]]);
+      for (let i = 0; i < 5; i++) { const an = -Math.PI / 2 + (i - 2) * .55; L([[Math.cos(an) * 44, -12 + Math.sin(an) * 44], [Math.cos(an) * 56, -12 + Math.sin(an) * 56]]); } break;
+    case 'doc': L([[-30, -44], [14, -44], [32, -26], [32, 44], [-30, 44]], true); L([[-16, -18], [18, -18]]); L([[-16, 0], [18, 0]]); L([[-16, 18], [8, 18]]); break;
+    case 'rise': L([[-40, 40], [40, 40]]); L([[-34, 24], [-10, 0], [8, 14], [36, -22]]); L([[18, -24], [36, -22], [34, -4]]); break;
+    case 'grad': L([[-46, -10], [0, -32], [46, -10], [0, 12]], true); L([[-26, 2], [-26, 26], [0, 38], [26, 26], [26, 2]]); L([[46, -10], [46, 24]]); break;
+    case 'chart': L([[-42, 42], [42, 42]]); c.fillRect(-36, 10, 18, 30); c.fillRect(-9, -8, 18, 48); c.fillRect(18, -32, 18, 72); break;
+    case 'ballot': L([[-42, 4], [42, 4], [42, 46], [-42, 46]], true); L([[-18, 4], [18, 4]]); break;
+    case 'star': c.beginPath(); for (let i = 0; i < 10; i++) { const r = i % 2 ? 18 : 42, an = -Math.PI / 2 + i * Math.PI / 5; c.lineTo(Math.cos(an) * r, Math.sin(an) * r); } c.closePath(); c.stroke(); break;
+    case 'eye': c.beginPath(); c.moveTo(-48, 0); c.quadraticCurveTo(0, -42, 48, 0); c.quadraticCurveTo(0, 42, -48, 0); c.stroke(); c.beginPath(); c.arc(0, 0, 14, 0, 7); c.fill(); break;
+    case 'scale': L([[0, -40], [0, 40]]); L([[-26, 40], [26, 40]]); L([[-42, -26], [42, -26]]);
+      c.beginPath(); c.arc(-42, 2, 16, 0, Math.PI); c.stroke(); c.beginPath(); c.arc(42, 2, 16, 0, Math.PI); c.stroke(); L([[-42, -26], [-56, 2]]); L([[-42, -26], [-28, 2]]); L([[42, -26], [28, 2]]); L([[42, -26], [56, 2]]); break;
+    case 'shield': c.beginPath(); c.moveTo(0, -46); c.lineTo(38, -30); c.quadraticCurveTo(38, 24, 0, 46); c.quadraticCurveTo(-38, 24, -38, -30); c.closePath(); c.stroke(); L([[-14, 0], [-2, 12], [18, -12]]); break;
+    case 'coin': c.beginPath(); c.arc(0, 0, 40, 0, 7); c.stroke(); text(c, 'RM', 0, 13, { size: 34, weight: 800, color: col }); break;
+    case 'mic': rr(c, -14, -44, 28, 52, 14); c.stroke(); c.beginPath(); c.arc(0, -6, 26, 0, Math.PI); c.stroke(); L([[0, 20], [0, 40]]); L([[-16, 40], [16, 40]]); break;
+    case 'home': L([[-44, -2], [0, -40], [44, -2]]); L([[-32, -10], [-32, 40], [32, 40], [32, -10]]); L([[-10, 40], [-10, 14], [10, 14], [10, 40]]); break;
+    case 'heart': c.beginPath(); c.moveTo(0, 36); c.bezierCurveTo(-60, -6, -30, -50, 0, -20); c.bezierCurveTo(30, -50, 60, -6, 0, 36); c.stroke(); break;
+    case 'brief': rr(c, -44, -22, 88, 62, 8); c.stroke(); L([[-16, -22], [-16, -36], [16, -36], [16, -22]]); L([[-44, 4], [44, 4]]); break;
+  }
+  c.restore();
+}
+function chip(c, x, y, w, h, label, ic, t, t0, o = {}) { // infographic card
+  const p = eBack(P(t, t0, .55)), q = P(t, t0, .3); if (q <= 0) return;
+  const { num = null, col = C.gold, size = 40 } = o;
+  c.save(); c.globalAlpha *= q; c.translate(x, y); c.scale(.8 + .2 * p, .8 + .2 * p);
+  const g = c.createLinearGradient(-w / 2, 0, w / 2, 0); g.addColorStop(0, 'rgba(23,56,107,.92)'); g.addColorStop(1, 'rgba(14,36,72,.92)');
+  c.fillStyle = g; rr(c, -w / 2, -h / 2, w, h, 26); c.fill();
+  c.strokeStyle = 'rgba(216,178,90,.65)'; c.lineWidth = 2.5; rr(c, -w / 2, -h / 2, w, h, 26); c.stroke();
+  c.fillStyle = col; c.fillRect(-w / 2 + 2, -h / 2 + 22, 6, h - 44);
+  if (ic) icon(c, ic, -w / 2 + 80, 0, .78 * h / 130, col, 1, 7);
+  if (num) text(c, num, w / 2 - 28, -h / 2 + 42, { size: 26, weight: 700, color: 'rgba(207,231,251,.55)', align: 'right', ls: 2 });
+  text(c, label, -w / 2 + (ic ? 150 : 40), 0, { size, weight: 800, color: C.white, align: 'left', base: 'middle', ls: 1 });
+  c.restore();
+}
+function arrowV(c, x, y0, y1, p, col = C.gold, a = 1) { // animated arrow down
+  if (p <= 0) return; const y = lerp(y0, y1, eOut(p));
+  c.save(); c.globalAlpha *= a; c.strokeStyle = col; c.lineWidth = 5; c.setLineDash([12, 10]); c.lineDashOffset = -p * 60;
+  c.beginPath(); c.moveTo(x, y0); c.lineTo(x, y); c.stroke(); c.setLineDash([]);
+  if (p > .7) { c.fillStyle = col; c.beginPath(); c.moveTo(x - 14, y - 16); c.lineTo(x + 14, y - 16); c.lineTo(x, y); c.fill(); }
+  c.restore();
+}
+function bubble(c, x, y, w, h, t, t0, o = {}) { // speech bubble with dots / icon
+  const p = eBack(P(t, t0, .5)), q = P(t, t0, .25); if (q <= 0) return;
+  const { col = C.lb2, ic = null, tail = 'left', a = 1, fillA = .95 } = o;
+  c.save(); c.globalAlpha *= q * a; c.translate(x, y); c.scale(p, p);
+  c.fillStyle = col; c.globalAlpha *= fillA; rr(c, -w / 2, -h / 2, w, h, h / 2.4); c.fill();
+  c.beginPath(); const tx = tail === 'left' ? -w / 2 + 34 : w / 2 - 34; c.moveTo(tx - 12, h / 2 - 4); c.lineTo(tx + (tail === 'left' ? -18 : 18), h / 2 + 22); c.lineTo(tx + 14, h / 2 - 4); c.fill();
+  c.globalAlpha /= fillA;
+  if (ic) icon(c, ic, 0, 0, h / 150, C.ink, 1, 8);
+  else for (let i = 0; i < 3; i++) { c.fillStyle = C.ink; c.globalAlpha = q * a * (.5 + .5 * Math.sin(t * 6 - i)); c.beginPath(); c.arc((i - 1) * h * .28, 0, h * .08, 0, 7); c.fill(); }
+  c.restore();
+}
+function paper(c, x, y, s, rot, a = 1, gold = false) { // policy document
+  c.save(); c.translate(x, y); c.rotate(rot); c.scale(s, s); c.globalAlpha *= a;
+  c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 20; c.shadowOffsetY = 8;
+  c.fillStyle = '#F4F7FB'; rr(c, -70, -92, 140, 184, 10); c.fill(); c.shadowColor = 'transparent';
+  c.fillStyle = gold ? C.gold : C.n3; c.fillRect(-48, -66, 96, 12);
+  c.fillStyle = 'rgba(14,36,72,.35)'; for (let i = 0; i < 6; i++) c.fillRect(-48, -38 + i * 20, i % 3 === 2 ? 60 : 96, 7);
+  if (gold) { c.strokeStyle = C.gold; c.lineWidth = 5; c.beginPath(); c.arc(34, 62, 16, 0, 7); c.stroke(); }
+  c.restore();
+}
+
+// ---------------- data from audio edit ----------------
+let TL = null, SUBS = null, PHOTO = null;
+const SC = [ // scene windows [in, out] (transitions overlap ~0.6s)
+  ['hook', 0, 11.15], ['change', 10.85, 30.9], ['youth', 30.6, 40.35], ['women', 40.05, 54.3],
+  ['issues', 54.0, 69.45], ['voices', 69.15, 79.7], ['future', 79.4, 90.5]];
+
+// ---------------- background (shared, continuous) ----------------
+const DUST = (() => { const r = rng(42); return Array.from({ length: 70 }, () => ({ x: r() * W, y: r() * H, z: .3 + r() * .7, ph: r() * 6.28 })); })();
+function background(c, t) {
+  const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, C.n0); g.addColorStop(.5, C.n1); g.addColorStop(1, C.n0);
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  // slow moving light pools
+  glow(c, W * (.3 + .1 * Math.sin(t * .11)), H * .32, 900, 'rgba(36,80,143,.55)');
+  glow(c, W * (.8 + .08 * Math.cos(t * .09)), H * .7, 800, 'rgba(23,56,107,.6)');
+  // infographic grid
+  c.save(); c.strokeStyle = 'rgba(140,196,240,.05)'; c.lineWidth = 1;
+  const off = (t * 8) % 90;
+  for (let x = -90 + off; x < W; x += 90) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, H); c.stroke(); }
+  for (let y = -90 + off; y < H; y += 90) { c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); }
+  c.restore();
+  for (const d of DUST) {
+    const y = (d.y - t * 14 * d.z + H * 10) % H, x = d.x + Math.sin(t * .4 + d.ph) * 20;
+    c.fillStyle = `rgba(207,231,251,${.10 + .25 * d.z * (.5 + .5 * Math.sin(t + d.ph))})`;
+    c.beginPath(); c.arc(x, y, 1.2 + 2.2 * d.z, 0, 7); c.fill();
+  }
+}
+function rays(c, x, y, t, a = 1, col = '244,213,141') { // cinematic light shafts
+  c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = a;
+  for (let i = 0; i < 7; i++) {
+    const an = Math.PI / 2 + (i - 3) * .17 + Math.sin(t * .3 + i) * .03, len = 1800;
+    const g = c.createLinearGradient(x, y, x + Math.cos(an) * len, y + Math.sin(an) * len);
+    g.addColorStop(0, `rgba(${col},.16)`); g.addColorStop(1, `rgba(${col},0)`);
+    c.fillStyle = g; c.beginPath(); c.moveTo(x, y);
+    c.lineTo(x + Math.cos(an - .05) * len, y + Math.sin(an - .05) * len); c.lineTo(x + Math.cos(an + .05) * len, y + Math.sin(an + .05) * len); c.fill();
+  }
+  c.restore();
+}
+function camera(c, t, t0, t1, z0 = 1, z1 = 1.06, dx = 0, dy = 0) {
+  const p = ease(P(t, t0, t1 - t0)), z = lerp(z0, z1, p);
+  c.translate(W / 2 + dx * p, H / 2 + dy * p); c.scale(z, z); c.translate(-W / 2, -H / 2);
+}
+
+// ===================== SCENES =====================
+// each receives (c, t) with absolute time t
+const S = {};
+S.hook = (c, t) => {
+  c.save(); camera(c, t, 0, 11, 1.0, 1.08, 0, -20);
+  const pr = ease(P(t, 1.2, 4.2));
+  glow(c, W / 2, 1050, 700, 'rgba(216,178,90,.20)', P(t, .5, 2));
+  parliament(c, W / 2, 1290, .82, { reveal: pr, a: .9 * P(t, 1.0, .6), fill: 'rgba(14,36,72,.92)', lights: P(t, 5, 2) * .8 });
+  rays(c, W / 2 + 120, 640, t, P(t, 3, 3) * .9);
+  // silhouette of a young woman (foreground, rim-lit)
+  const sa = P(t, .2, 1.4);
+  bust(c, W / 2 - 170, 1300 + (1 - eOut(sa)) * 40, 1.75, { hijab: '#0A1830', jacket: '#081329', top: '#0E1E3B', skin: '#0E1E3B', a: sa, rim: .85 });
+  c.restore();
+  // speaker card: Nurul Jannah
+  const pc = eOut(P(t, .5, .8)), out = ease(P(t, 4.9, .7));
+  if (PHOTO && pc > 0 && out < 1) {
+    const cx = lerp(W / 2, W / 2, out), cy = lerp(560, 560, out), r = 150 * (1 - out * .9);
+    c.save(); c.globalAlpha = pc * (1 - out);
+    glow(c, cx, cy, r * 2.2, 'rgba(216,178,90,.35)');
+    c.beginPath(); c.arc(cx, cy, r, 0, 7); c.save(); c.clip(); c.drawImage(PHOTO, cx - r, cy - r, 2 * r, 2 * r); c.restore();
+    c.strokeStyle = C.gold; c.lineWidth = 6; c.beginPath(); c.arc(cx, cy, r + 8, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * eOut(P(t, .5, 1.2))); c.stroke();
+    text(c, 'PERKONGSIAN OLEH', cx, cy + r + 72, { size: 28, weight: 700, color: C.lb, ls: 7 });
+    text(c, 'NURUL JANNAH', cx, cy + r + 140, { size: 72, weight: 900, color: C.white, ls: 2, shadow: 20 });
+    c.restore();
+  }
+  // title (synced to "dan kenapa saya rasa perlunya wanita muda masuk dalam bidang politik")
+  const ta = 1 - P(t, 10.7, .45);
+  kicker(c, 'DOKUMENTARI INFOGRAFIK', W / 2, 330, t, 5.6, C.gold, ta);
+  kinetic(c, [
+    { w: 'KENAPA', t: 6.4 }, { w: 'WANITA', t: 8.55, col: C.gold2 }, { w: 'MUDA', t: 8.85, col: C.gold2, ul: 1 },
+    { w: 'PERLU', t: 7.9 }, { w: 'TERLIBAT', t: 9.2 }, { w: 'DALAM', t: 9.5 }, { w: 'POLITIK?', t: 9.95 }],
+    W / 2, 470, { t, size: 104, maxW: 900, a: ta });
+};
+
+S.change = (c, t) => {
+  c.save(); camera(c, t, 10.9, 30.9, 1.0, 1.04);
+  // A. people who want change (11.4 – 16.6)
+  const A1 = fade(t, 11.2, 21.0, .5, .6);
+  if (A1 > 0) {
+    c.save(); c.globalAlpha = A1;
+    kicker(c, 'POLITIK SEBAGAI ALAT PERUBAHAN', W / 2, 330, t, 11.3);
+    kinetic(c, [...W_('UNTUK', 13.5), ...W_('MENGUBAH', 14.9, .1, C.gold2), ...W_('SESUATU', 15.4, .1, C.gold2)], W / 2, 470, { t, size: 96 });
+    const r = rng(3);
+    for (let i = 0; i < 15; i++) { // crowd
+      const row = i < 8 ? 0 : 1, k = row ? i - 8 : i, n = row ? 7 : 8;
+      const x = W / 2 + (k - (n - 1) / 2) * 112 + (row ? 0 : 0), y = 1290 + row * -120;
+      const p = eBack(P(t, 11.6 + i * .08, .5));
+      const walk = P(t, 16.6, 3.2);
+      const tx = lerp(x, W / 2 + (k - (n - 1) / 2) * 30, ease(walk)), ty = lerp(y, 1010, ease(walk));
+      const col = i % 3 === 0 ? C.gold : i % 3 === 1 ? C.lb : C.lb2;
+      (i % 2 ? womanIcon : person)(c, tx, ty, (.85 + r() * .3) * p * (1 - .55 * ease(walk)), col, (1 - P(t, 19.2, .8)));
+    }
+    // decision room: glowing doorway (16.5 – 21)
+    const d = eOut(P(t, 16.4, .9));
+    if (d > 0) {
+      c.save(); c.globalAlpha *= d;
+      glow(c, W / 2, 900, 380, 'rgba(244,213,141,.55)', .8 + .2 * Math.sin(t * 3));
+      c.fillStyle = 'rgba(244,213,141,.18)'; c.beginPath(); c.moveTo(W / 2 - 150, 1080); c.lineTo(W / 2 - 150, 820); c.arc(W / 2, 820, 150, Math.PI, 0); c.lineTo(W / 2 + 150, 1080); c.fill();
+      c.strokeStyle = C.gold; c.lineWidth = 6; c.stroke();
+      icon(c, 'scale', W / 2, 860, 1.1, C.gold2, P(t, 17, .5), 7);
+      c.restore();
+      text(c, 'RUANG KEPUTUSAN DIBUAT', W / 2, 1210, { size: 52, weight: 900, color: C.white, a: P(t, 18.7, .4) * A1, ls: 2 });
+    }
+    c.restore();
+  }
+  // B. flow: RAKYAT → IDEA → DASAR → PERUBAHAN (21.15 – 30.6)
+  const B = P(t, 20.8, .5);
+  if (B > 0) {
+    c.save(); c.globalAlpha = B * (1 - P(t, 30.6, .3));
+    kicker(c, 'POLITIK = PROSES MEMBINA DASAR', W / 2, 300, t, 21.1);
+    const nodes = [['RAKYAT', 'people', 21.3], ['IDEA', 'bulb', 22.4], ['DASAR', 'doc', 23.75], ['PERUBAHAN', 'rise', 24.5]];
+    const m = ease(P(t, 25.3, .9)); // morph vertical -> compact horizontal
+    nodes.forEach(([lab, ic, t0], i) => {
+      const vx = W / 2, vy = 470 + i * 205, hx = 165 + i * 250, hy = 470;
+      const x = lerp(vx, hx, m), y = lerp(vy, hy, m), w = lerp(640, 230, m), h = lerp(150, 140, m);
+      if (m < .5) { chip(c, x, y, w, h, lab, ic, t, t0, { num: '0' + (i + 1), col: i === 3 ? C.gold2 : C.gold, size: 50 }); if (i < 3) arrowV(c, vx, vy + 80, vy + 125, P(t, t0 + .4, .6), C.gold, 1 - m * 2); }
+      else { // compact node: icon circle + label
+        const q = (m - .5) * 2;
+        c.save(); c.globalAlpha *= q;
+        c.fillStyle = 'rgba(23,56,107,.95)'; c.beginPath(); c.arc(x, y - 18, 68, 0, 7); c.fill(); c.strokeStyle = i === 3 ? C.gold2 : C.gold; c.lineWidth = 4; c.stroke();
+        icon(c, ic, x, y - 18, .78, i === 3 ? C.gold2 : C.gold, 1, 7);
+        text(c, lab, x, y + 92, { size: 32, weight: 800, ls: 1, color: i === 3 ? C.gold2 : C.white });
+        if (i < 3) { c.fillStyle = C.gold; c.beginPath(); c.moveTo(x + 84, y - 30); c.lineTo(x + 100, y - 18); c.lineTo(x + 84, y - 6); c.fill(); }
+        c.restore();
+      }
+    });
+    // branches into society
+    const br = [['PENDIDIKAN', 'grad', 27.0, 'Bagaimana pendidikan diuruskan'], ['EKONOMI', 'chart', 29.15, 'Bagaimana ekonomi diperkasakan']];
+    br.forEach(([lab, ic, t0, sub], i) => {
+      const p = P(t, t0, .5); if (p <= 0) return;
+      const x = W / 2, y = 860 + i * 300;
+      c.save(); c.strokeStyle = 'rgba(216,178,90,.6)'; c.lineWidth = 3; c.setLineDash([8, 8]); c.lineDashOffset = -t * 30;
+      c.beginPath(); c.moveTo(165 + 3 * 250, 600); c.bezierCurveTo(900, 700, x + 200, y - 160, x + 200, y - 110); c.globalAlpha *= p; c.stroke(); c.restore();
+      chip(c, x, y, 860, 210, lab, ic, t, t0, { size: 60 });
+      text(c, sub, x - 430 + 150, y + 62, { size: 30, weight: 500, color: C.lb2, align: 'left', a: P(t, t0 + .3, .4) });
+    });
+    text(c, 'TRANSFORMASI SOSIAL', W / 2, 1400 - 30, { size: 34, weight: 800, color: C.gold, ls: 8, a: P(t, 29.8, .5) * 0 });
+    c.restore();
+  }
+  c.restore();
+};
+
+S.youth = (c, t) => {
+  c.save(); camera(c, t, 30.6, 40.4, 1.04, 1.0);
+  kicker(c, 'ANAK MUDA & DEMOKRASI', W / 2, 270, t, 30.8);
+  kinetic(c, [{ w: 'PARLIMEN', t: 31.0 }, { w: 'BELIA', t: 31.75, col: C.gold2 }, { w: 'MALAYSIA', t: 32.0 }], W / 2, 380, { t, size: 84 });
+  // hemicycle
+  const cx = W / 2, cy = 975;
+  glow(c, cx, cy - 120, 520, 'rgba(36,80,143,.6)');
+  let k = 0; const r = rng(11);
+  for (let row = 0; row < 7; row++) {
+    const R = 160 + row * 44, n = Math.round(R / 20);
+    for (let i = 0; i <= n; i++) {
+      const an = Math.PI + (i / n) * Math.PI, x = cx + Math.cos(an) * R, y = cy + Math.sin(an) * R * .82;
+      const order = (i / n) + row * .06, p = eBack(P(t, 32.4 + order * 2.2, .4));
+      if (p <= 0) { k++; continue; }
+      const young = r() < .45;
+      c.fillStyle = young ? C.gold2 : C.lb; c.globalAlpha = .95;
+      c.beginPath(); c.arc(x, y, 12 * p, 0, 7); c.fill(); k++;
+    }
+  }
+  c.globalAlpha = 1;
+  // speaker's podium
+  c.fillStyle = C.n3; rr(c, cx - 70, cy - 30, 140, 60, 10); c.fill(); c.strokeStyle = C.gold; c.lineWidth = 3; c.stroke();
+  icon(c, 'mic', cx, cy - 70, .55, C.gold2, P(t, 32.5, .4));
+  // legend
+  const lg = P(t, 34.2, .5);
+  c.save(); c.globalAlpha = lg; c.fillStyle = C.gold2; c.beginPath(); c.arc(W / 2 - 250, 1040, 12, 0, 7); c.fill();
+  text(c, 'Belia dilatih', W / 2 - 225, 1051, { size: 30, weight: 600, align: 'left', color: C.lb2 });
+  c.fillStyle = C.lb; c.beginPath(); c.arc(W / 2 + 70, 1040, 12, 0, 7); c.fill();
+  text(c, 'Peserta dewan', W / 2 + 95, 1051, { size: 30, weight: 600, align: 'left', color: C.lb2 }); c.restore();
+  text(c, 'PLATFORM UNTUK MELATIH ANAK MUDA', W / 2, 540, { size: 38, weight: 800, color: C.lb2, ls: 3, a: P(t, 33.3, .5) });
+  // infographic chips with ballot animation
+  chip(c, W / 2, 1130, 820, 100, 'PROSES DEMOKRASI', 'ballot', t, 35.75, { num: '01', size: 42 });
+  chip(c, W / 2, 1245, 820, 100, 'DASAR AWAM', 'doc', t, 37.75, { num: '02', size: 42 });
+  chip(c, W / 2, 1360, 820, 100, 'KEPIMPINAN', 'star', t, 38.85, { num: '03', size: 42 });
+  // ballot paper dropping into box on chip 01
+  const bp = P(t, 36.2, .8);
+  if (bp > 0 && bp < 1) { c.save(); c.globalAlpha = 1 - P(t, 36.85, .15); c.fillStyle = C.white; rr(c, W / 2 - 410 + 80 - 14, lerp(1050, 1124, ease(bp)), 28, 36, 3); c.fill(); c.restore(); }
+  c.restore();
+};
+
+S.women = (c, t) => {
+  c.save(); camera(c, t, 40.0, 54.3, 1.0, 1.06, 0, -10);
+  // A: more women (40.4–44.1)
+  const A1 = fade(t, 40.0, 44.3, .4, .5);
+  if (A1 > 0) {
+    c.save(); c.globalAlpha = A1;
+    kicker(c, 'SUDAH TIBA MASANYA', W / 2, 300, t, 41.2);
+    kinetic(c, [...W_('LEBIH', 42.8), ...W_('RAMAI', 43.2), ...W_('WANITA', 43.5, .1, C.gold2)], W / 2, 450, { t, size: 110 });
+    for (let i = 0; i < 18; i++) {
+      const row = Math.floor(i / 6), col = i % 6, x = W / 2 + (col - 2.5) * 140, y = 820 + row * 190;
+      womanIcon(c, x, y, 1.25 * eBack(P(t, 41.4 + i * .1, .4)), i % 4 === 0 ? C.gold2 : C.lb, .95);
+    }
+    c.restore();
+  }
+  // B: not just observers (44.2–49.0)
+  const B = fade(t, 44.0, 49.2, .4, .5);
+  if (B > 0) {
+    c.save(); c.globalAlpha = B;
+    kinetic(c, [...W_('WANITA BUKAN SEKADAR', 44.25, .14), { w: 'PEMERHATI.', t: 46.25, col: C.gold2, ul: 1 }], W / 2, 330, { t, size: 100, maxW: 900 });
+    // chamber far away, women watching from distance ("dari jauh")
+    const far = ease(P(t, 47.4, 1.2));
+    parliament(c, W / 2, 1180, .62 - far * .12, { a: .85, fill: 'rgba(14,36,72,.9)', lights: .5 });
+    for (let i = 0; i < 5; i++) figure(c, W / 2 + (i - 2) * 130, 1390 + far * 20, 260 - far * 40, { sil: '#0A1528', a: 1, hijab: i % 2 ? 1 : 0 });
+    icon(c, 'eye', W / 2, 760, 1.2, C.lb2, P(t, 46.2, .5));
+    c.restore();
+  }
+  // C: shapers of policy (49.0–54)
+  const Cc = P(t, 48.9, .6);
+  if (Cc > 0) {
+    c.save(); c.globalAlpha = Cc;
+    kinetic(c, [...W_('WANITA JUGA', 49.6, .12), ...W_('PEMBENTUK DASAR.', 51.75, .25, C.gold2)], W / 2, 330, { t, size: 100, maxW: 900 });
+    const z = eOut(P(t, 49, 1.4));
+    glow(c, W / 2, 900, 520, 'rgba(216,178,90,.25)', z);
+    rays(c, W / 2, 520, t, z * .6, '207,231,251');
+    // leader at lectern
+    bust(c, W / 2, 1150, 1.6 + z * .1, { hijab: C.n4, jacket: '#0F2A55', top: C.white, skin: C.skin[0], rim: .6, a: z });
+    c.fillStyle = '#132E5A'; c.beginPath(); c.moveTo(W / 2 - 230, 1060); c.lineTo(W / 2 + 230, 1060); c.lineTo(W / 2 + 190, 1400); c.lineTo(W / 2 - 190, 1400); c.fill();
+    c.strokeStyle = C.gold; c.lineWidth = 4; c.stroke();
+    c.fillStyle = C.gold; c.fillRect(W / 2 - 230, 1060, 460, 10);
+    icon(c, 'star', W / 2, 1220, .9, C.gold2, z);
+    c.strokeStyle = '#9AA7BC'; c.lineWidth = 6; c.beginPath(); c.moveTo(W / 2 + 60, 1062); c.quadraticCurveTo(W / 2 + 80, 980, W / 2 + 40, 930); c.stroke();
+    c.fillStyle = '#2A2F3A'; c.beginPath(); c.ellipse(W / 2 + 36, 920, 12, 18, -.5, 0, 7); c.fill();
+    bubble(c, 230, 700, 230, 130, t, 50.2, { ic: 'doc' });
+    bubble(c, 850, 640, 200, 116, t, 50.9, { tail: 'right' });
+    bubble(c, 870, 860, 230, 130, t, 52.3, { tail: 'right', ic: 'scale', col: C.gold2 });
+    [[180, 980, -.25, 51.9], [900, 1060, .22, 52.3], [250, 1250, .12, 52.7]].forEach(([x, y, r_, t0]) => {
+      const p = eOut(P(t, t0, .7)); if (p > 0) paper(c, lerp(W / 2, x, p), lerp(1000, y, p), .75 * p, r_ * p, p, true);
+    });
+    c.restore();
+  }
+  c.restore();
+};
+
+S.issues = (c, t) => {
+  c.save();
+  kicker(c, 'ISU SEBENAR YANG DIPERJUANGKAN', W / 2, 250, t, 54.2);
+  const panels = [[54.0, 59.5], [59.45, 64.85], [64.8, 69.45]];
+  panels.forEach(([a, b], i) => {
+    const vin = ease(P(t, a, .55)), vout = ease(P(t, b - .5, .55));
+    const off = (1 - vin) * 700 - vout * 700; const al = Math.min(vin, 1 - vout);
+    if (al <= 0) return;
+    c.save(); c.globalAlpha = al; c.translate(off, 0);
+    const lt = t;
+    // number badge
+    text(c, '0' + (i + 1) + ' / 03', W / 2, 340, { size: 34, weight: 800, color: C.gold, ls: 6 });
+    if (i === 0) { // CHILDCARE
+      kinetic(c, [...W_('TASKA', 55.9, .1, C.gold2), ...W_('DI TEMPAT KERJA', 56.5, .12)], W / 2, 450, { t: lt, size: 84, maxW: 900 });
+      // office + taska building
+      c.fillStyle = 'rgba(23,56,107,.95)'; c.fillRect(140, 640, 260, 560); c.strokeStyle = C.lb; c.lineWidth = 3; c.strokeRect(140, 640, 260, 560);
+      for (let j = 0; j < 9; j++) for (let k = 0; k < 4; k++) { c.fillStyle = (j + k) % 3 ? 'rgba(140,196,240,.35)' : 'rgba(244,213,141,.6)'; c.fillRect(160 + k * 60, 664 + j * 58, 40, 34); }
+      const tk = eBack(P(t, 55.9, .6));
+      c.save(); c.translate(560, 1200); c.scale(tk, tk);
+      c.fillStyle = '#F4F7FB'; c.fillRect(0, -300, 380, 300); c.fillStyle = C.gold; c.beginPath(); c.moveTo(-30, -300); c.lineTo(190, -440); c.lineTo(410, -300); c.fill();
+      c.fillStyle = C.n3; rr(c, 140, -150, 100, 150, 10); c.fill();
+      c.fillStyle = C.lb; c.beginPath(); c.arc(70, -200, 40, 0, 7); c.fill(); c.beginPath(); c.arc(310, -200, 40, 0, 7); c.fill();
+      text(c, 'TASKA', 190, -320, { size: 52, weight: 900, color: C.ink, ls: 4 });
+      c.restore();
+      icon(c, 'heart', 900, 760, 1.0, C.gold2, P(t, 57.9, .4));
+      // mother and child walking together
+      const wk = t * 5;
+      figure(c, 420 + P(t, 54.3, 5) * 60, 1360, 340, { hijab: '#3D6FB0', body: '#F4F7FB', skin: C.skin[1], walk: wk, bag: true });
+      figure(c, 520 + P(t, 54.3, 5) * 60, 1360, 190, { hijab: null, body: C.gold, skin: C.skin[1], walk: wk + 1 });
+      text(c, 'Membantu ibu bekerja', W / 2, 640, { size: 40, weight: 600, color: C.lb2, a: P(t, 57.8, .5) });
+    } else if (i === 1) { // RIGHTS & DIGNITY
+      kinetic(c, [...W_('HAK', 60.2, .1, C.gold2), ...W_('WANITA', 60.4, .1, C.gold2), ...W_('MUSLIM', 60.75, .1)], W / 2, 450, { t: lt, size: 92, maxW: 900 });
+      text(c, 'Berpakaian mengikut tuntutan agama', W / 2, 640, { size: 38, weight: 600, color: C.lb2, a: P(t, 62.6, .5) });
+      text(c, 'di tempat kerja', W / 2, 690, { size: 38, weight: 600, color: C.lb2, a: P(t, 63.8, .5) });
+      const z = eOut(P(t, 59.6, 1.2));
+      glow(c, W / 2, 980, 460, 'rgba(244,213,141,.35)', z);
+      c.save(); c.strokeStyle = 'rgba(244,213,141,.6)'; c.lineWidth = 3; c.globalAlpha *= z;
+      for (let k = 0; k < 3; k++) { c.beginPath(); c.arc(W / 2, 960, 300 + k * 50 + Math.sin(t * 2 + k) * 6, Math.PI * 1.05, Math.PI * 1.95); c.stroke(); }
+      c.restore();
+      bust(c, W / 2, 1360, 2.0, { hijab: '#1F4C8A', jacket: '#0E2448', top: C.white, skin: C.skin[0], rim: .7, a: z });
+      icon(c, 'shield', 220, 1150, 1.1, C.gold2, P(t, 61.2, .5));
+      icon(c, 'brief', 860, 1150, 1.1, C.lb2, P(t, 63.9, .5));
+      text(c, 'MARUAH', 220, 1250, { size: 30, weight: 800, color: C.gold2, ls: 4, a: P(t, 61.4, .5) });
+      text(c, 'KERJAYA', 860, 1250, { size: 30, weight: 800, color: C.lb2, ls: 4, a: P(t, 64.0, .5) });
+    } else { // ECONOMY & WORKING WOMEN
+      kinetic(c, [...W_('SOKONGAN', 66.2, .1, C.gold2), ...W_('WANITA BEKERJA', 67.85, .14)], W / 2, 450, { t: lt, size: 88, maxW: 900 });
+      text(c, 'EKONOMI WANITA', W / 2, 640, { size: 36, weight: 800, color: C.lb2, ls: 8, a: P(t, 65.2, .5) });
+      // entrepreneur at a small shop stall
+      const z = eOut(P(t, 64.9, .8));
+      c.save(); c.globalAlpha *= z;
+      c.fillStyle = '#F4F7FB'; c.fillRect(150, 820, 470, 30);
+      for (let k = 0; k < 6; k++) { c.fillStyle = k % 2 ? C.gold : C.lb; c.beginPath(); c.moveTo(150 + k * 78, 820); c.lineTo(150 + k * 78 + 78, 820); c.arc(150 + k * 78 + 39, 850, 39, 0, Math.PI); c.fill(); }
+      c.fillStyle = '#4A3A2A'; c.fillRect(170, 850, 12, 420); c.fillRect(590, 850, 12, 420);
+      bust(c, 385, 1180, 1.3, { hijab: '#7A4E9E', jacket: '#F4F7FB', top: C.gold, skin: C.skin[2] });
+      c.fillStyle = '#5B4330'; c.fillRect(150, 1150, 470, 130); c.fillStyle = C.gold; c.fillRect(150, 1150, 470, 12);
+      for (let k = 0; k < 4; k++) { c.fillStyle = [C.lb, C.gold2, '#E58C8C', C.lb2][k]; rr(c, 180 + k * 110, 1100, 80, 56, 8); c.fill(); }
+      c.restore();
+      // rising bars
+      const bars = [.35, .5, .62, .8, 1];
+      bars.forEach((v, k) => { const p = eOut(P(t, 65.6 + k * .18, .6)); c.fillStyle = k === 4 ? C.gold2 : 'rgba(140,196,240,.85)'; c.fillRect(690 + k * 60, 1270 - v * 360 * p, 42, v * 360 * p); });
+      c.strokeStyle = C.gold2; c.lineWidth = 4; c.beginPath(); c.moveTo(670, 1272); c.lineTo(1000, 1272); c.stroke();
+      [[740, 820, 66.8], [880, 760, 67.2], [960, 880, 67.6]].forEach(([x, y, t0]) => icon(c, 'coin', x, y - eOut(P(t, t0, .6)) * 30, .7, C.gold2, P(t, t0, .4)));
+    }
+    c.restore();
+  });
+  // progress dots
+  for (let i = 0; i < 3; i++) { const on = t >= panels[i][0] && t < panels[i][1]; c.fillStyle = on ? C.gold : 'rgba(207,231,251,.3)'; c.beginPath(); c.arc(W / 2 + (i - 1) * 36, 1410, on ? 9 : 6, 0, 7); c.fill(); }
+  c.restore();
+};
+
+S.voices = (c, t) => {
+  c.save(); camera(c, t, 69.1, 79.7, 1.06, 1.0);
+  kicker(c, 'KEHADIRAN WANITA DALAM POLITIK', W / 2, 260, t, 72.3);
+  const cx = W / 2, cy = 860;
+  // central policy document
+  const dp = eBack(P(t, 69.8, .7));
+  glow(c, cx, cy, 380, 'rgba(216,178,90,.35)', dp);
+  paper(c, cx, cy, 1.35 * dp, 0, P(t, 69.8, .3), true);
+  text(c, 'DASAR', cx, cy + 185, { size: 40, weight: 900, color: C.gold2, ls: 8, a: P(t, 70.4, .5) });
+  // ring of women with different backgrounds
+  const ppl = [
+    { an: -150, o: { hijab: C.n4, jacket: '#1E4A86', skin: C.skin[0] } },
+    { an: -90, o: { hijab: null, hair: '#1A1210', jacket: '#7A2E3B', skin: C.skin[3] } },
+    { an: -30, o: { hijab: '#6B4E9B', jacket: '#24508F', skin: C.skin[2] } },
+    { an: 30, o: { hijab: null, hair: '#3A2418', jacket: '#2F6E5E', skin: C.skin[4] } },
+    { an: 150, o: { hijab: '#C9A04C', jacket: '#17386B', skin: C.skin[1] } },
+  ];
+  const icons = ['home', 'grad', 'heart', 'brief', 'chart', 'scale'];
+  ppl.forEach((p, i) => {
+    const an = p.an * Math.PI / 180, R = 380, x = cx + Math.cos(an) * R, y = cy + Math.sin(an) * R * .85;
+    const t0 = 70.4 + i * .45, q = eBack(P(t, t0, .6));
+    if (q <= 0) return;
+    // connector line flowing into the document
+    const lp = P(t, 74.6 + i * .12, .8);
+    if (lp > 0) {
+      c.save(); c.strokeStyle = 'rgba(244,213,141,.75)'; c.lineWidth = 4; c.setLineDash([10, 12]); c.lineDashOffset = -t * 60;
+      c.beginPath(); c.moveTo(x, y - 60); c.lineTo(lerp(x, cx, lp * .7), lerp(y - 60, cy, lp * .7)); c.stroke(); c.restore();
+    }
+    c.save(); c.globalAlpha = Math.min(1, q);
+    c.beginPath(); c.arc(x, y - 70, 118 * q, 0, 7); c.fillStyle = 'rgba(14,36,72,.95)'; c.fill(); c.strokeStyle = i % 2 ? C.lb : C.gold; c.lineWidth = 4; c.stroke();
+    c.save(); c.beginPath(); c.arc(x, y - 70, 114 * q, 0, 7); c.clip(); bust(c, x, y + 40, .62 * q, { ...p.o, top: p.o.top || C.white }); c.restore();
+    c.restore();
+    bubble(c, x + (Math.cos(an) > 0 ? 80 : -80), y - 200, 120, 80, t, 72.3 + i * .3, { ic: icons[i], tail: Math.cos(an) > 0 ? 'left' : 'right', col: i % 2 ? C.lb2 : C.gold2 });
+  });
+  kinetic(c, [...W_('SETIAP', 74.9, .1), ...W_('SUARA', 75.15, .1, C.gold2), ...W_('MEMBAWA', 75.45, .1), { w: 'PERSPEKTIF.', t: 75.7, col: C.gold2, ul: 1 }], W / 2, 1460 - 120 - 30, { t, size: 82, maxW: 960 });
+  c.restore();
+};
+
+S.future = (c, t) => {
+  c.save(); camera(c, t, 79.4, 90, 1.0, 1.1, 0, -40);
+  const sun = P(t, 79.4, 2.5);
+  glow(c, W / 2, 1060, 900, 'rgba(244,213,141,.45)', sun);
+  glow(c, W / 2, 1060, 300, 'rgba(255,240,210,.7)', sun);
+  rays(c, W / 2, 1000, t, sun * 1.1);
+  parliament(c, W / 2, 1180, .7, { fill: 'rgba(8,19,41,.96)', line: 'rgba(244,213,141,.85)', a: sun, lights: .35 });
+  // horizon + path
+  c.fillStyle = '#060E1E'; c.fillRect(0, 1180, W, 740);
+  const g = c.createLinearGradient(0, 1180, 0, 1600); g.addColorStop(0, 'rgba(244,213,141,.5)'); g.addColorStop(1, 'rgba(244,213,141,0)');
+  c.fillStyle = g; c.beginPath(); c.moveTo(W / 2 - 40, 1180); c.lineTo(W / 2 + 40, 1180); c.lineTo(W / 2 + 420, 1920); c.lineTo(W / 2 - 420, 1920); c.fill();
+  // young women walking towards it (perspective: they shrink as they go)
+  const wk = P(t, 79.4, 11);
+  [[-150, 0, 1], [10, .6, 0], [170, .3, 1]].forEach(([dx, d, hj], i) => {
+    const prog = clamp(wk * 1.0 + d * .05), sc = lerp(1.0, .55, ease(prog));
+    const x = W / 2 + dx * sc, y = lerp(1560, 1330, ease(prog)) + i * 6;
+    figure(c, x, y, 420 * sc, { sil: '#040913', hijab: hj, walk: t * 4.2 + i * 1.7, a: P(t, 79.6, 1) });
+  });
+  c.restore();
+  // typography
+  const ty = 330;
+  kinetic(c, [...W_('MASA DEPAN', 79.85, .2), ...W_('TIDAK DIBENTUK OLEH', 80.7, .12), { w: 'PEMERHATI.', t: 81.5, col: C.gold2, ul: 1 }], W / 2, ty, { t, size: 86, maxW: 920 });
+  kinetic(c, [...W_('Ia dibentuk oleh mereka yang', 82.4, .1, C.lb2, { it: 1 }), ...W_('berani', 82.75, .1, C.gold2, { it: 1 }), ...W_('mengambil bahagian.', 83.1, .14, C.lb2, { it: 1 })],
+    W / 2, ty + 300, { t, size: 54, weight: 700, font: FS, maxW: 860, ls: 0 });
+  // closing credit
+  const cr = P(t, 85.3, .8);
+  if (cr > 0 && PHOTO) {
+    c.save(); c.globalAlpha = cr; const cx = W / 2 - 200, cy = 1730;
+    c.beginPath(); c.arc(cx, cy, 52, 0, 7); c.save(); c.clip(); c.drawImage(PHOTO, cx - 52, cy - 52, 104, 104); c.restore();
+    c.strokeStyle = C.gold; c.lineWidth = 4; c.beginPath(); c.arc(cx, cy, 56, 0, 7); c.stroke();
+    text(c, 'NURUL JANNAH', cx + 80, cy - 4, { size: 42, weight: 900, align: 'left', ls: 2 });
+    text(c, 'Suara wanita muda', cx + 80, cy + 38, { size: 28, weight: 500, align: 'left', color: C.lb2 });
+    c.restore();
+  }
+};
+
+// ---------------- overlays ----------------
+function subtitles(c, t) {
+  if (!SUBS) return;
+  const ch = SUBS.find(s => t >= s.t0 && t < s.t1); if (!ch) return;
+  const a = Math.min(P(t, ch.t0, .12), 1 - P(t, ch.t1 - .1, .1));
+  const size = 50, y = 1560;
+  const words = ch.words.map(w => ({ ...w, w: w.w }));
+  c.save(); c.font = `800 ${size}px ${FD}`; c.letterSpacing = '0px';
+  const sp = c.measureText(' ').width, ws = words.map(w => c.measureText(w.w).width);
+  const tot = ws.reduce((s, q) => s + q, 0) + sp * (ws.length - 1);
+  c.globalAlpha = a * .62; c.fillStyle = '#030814'; rr(c, W / 2 - tot / 2 - 34, y - size - 14, tot + 68, size + 46, 20); c.fill();
+  c.globalAlpha = a; let x = W / 2 - tot / 2;
+  words.forEach((w, i) => {
+    const on = t >= w.t0 - .04;
+    text(c, w.w, x, y, { size, weight: 800, align: 'left', color: on ? (t < w.t1 + .05 ? C.gold2 : C.white) : 'rgba(255,255,255,.55)' });
+    x += ws[i] + sp;
+  });
+  c.restore();
+}
+function badge(c, t) { // persistent speaker badge after the intro card
+  const a = P(t, 5.4, .6) * (1 - P(t, 84.8, .5)); if (a <= 0 || !PHOTO) return;
+  c.save(); c.globalAlpha = a * .95; const x = 92, y = 150;
+  c.fillStyle = 'rgba(4,10,22,.55)'; rr(c, x - 50, y - 46, 430, 92, 46); c.fill();
+  c.beginPath(); c.arc(x, y, 38, 0, 7); c.save(); c.clip(); c.drawImage(PHOTO, x - 38, y - 38, 76, 76); c.restore();
+  c.strokeStyle = C.gold; c.lineWidth = 3; c.beginPath(); c.arc(x, y, 40, 0, 7); c.stroke();
+  text(c, 'NURUL JANNAH', x + 56, y - 2, { size: 28, weight: 800, align: 'left', ls: 1.5 });
+  text(c, 'Perkongsian asal', x + 56, y + 30, { size: 22, weight: 500, align: 'left', color: C.lb });
+  // live audio bars
+  for (let i = 0; i < 4; i++) { const h = 8 + 14 * Math.abs(Math.sin(t * 9 + i * 1.3)); c.fillStyle = C.gold; c.fillRect(x + 326 + i * 9, y - h / 2, 5, h); }
+  c.restore();
+}
+function vignette(c) {
+  const g = c.createRadialGradient(W / 2, H / 2, H * .3, W / 2, H / 2, H * .75);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.55)'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+}
+const GR = (() => { const g = mk(); g.width = 256; g.height = 256; const gc = g.getContext('2d'); const id = gc.createImageData(256, 256); const r = rng(5);
+  for (let i = 0; i < id.data.length; i += 4) { const v = r() * 255; id.data[i] = id.data[i + 1] = id.data[i + 2] = v; id.data[i + 3] = 10; } gc.putImageData(id, 0, 0); return g; })();
+function grain(c, t) { const p = c.createPattern(GR, 'repeat'); c.save(); c.translate((t * 997) % 256, (t * 613) % 256); c.fillStyle = p; c.fillRect(-256, -256, W + 512, H + 512); c.restore(); }
+function sweep(c, t) { // light streak at each scene cut
+  for (let i = 1; i < SC.length; i++) {
+    const b = (SC[i][1] + SC[i - 1][2]) / 2, p = P(t, b - .35, .7);
+    if (p <= 0 || p >= 1) continue;
+    const y = lerp(-200, H + 200, ease(p));
+    c.save(); c.globalCompositeOperation = 'lighter'; c.translate(W / 2, y); c.rotate(-.18);
+    const g = c.createLinearGradient(0, -90, 0, 90); g.addColorStop(0, 'rgba(244,213,141,0)'); g.addColorStop(.5, `rgba(244,213,141,${.45 * Math.sin(p * Math.PI)})`); g.addColorStop(1, 'rgba(244,213,141,0)');
+    c.fillStyle = g; c.fillRect(-W, -90, 2 * W, 180);
+    c.fillStyle = `rgba(255,255,255,${.6 * Math.sin(p * Math.PI)})`; c.fillRect(-W, -1.5, 2 * W, 3); c.restore();
+  }
+}
+
+// ---------------- main ----------------
+function draw(t) {
+  X.setTransform(1, 0, 0, 1, 0, 0); X.globalAlpha = 1; X.globalCompositeOperation = 'source-over';
+  background(X, t);
+  const act = SC.filter(s => t >= s[1] && t < s[2]);
+  act.forEach((s, k) => {
+    const L = k ? LB : LA, c = L.getContext('2d');
+    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H); c.globalAlpha = 1;
+    S[s[0]](c, t);
+    const fi = s[1] <= 0 ? 1 : ease(P(t, s[1], .6)), fo = 1 - ease(P(t, s[2] - .6, .6));
+    const a = Math.min(fi, fo), z = fi < 1 ? lerp(.94, 1, fi) : lerp(1, 1.08, 1 - fo);
+    X.save(); X.globalAlpha = a; X.translate(W / 2, H / 2); X.scale(z, z); X.translate(-W / 2, -H / 2);
+    if (a < 1) X.filter = `blur(${(1 - a) * 10}px)`;
+    X.drawImage(L, 0, 0); X.restore(); X.filter = 'none';
+  });
+  sweep(X, t);
+  vignette(X);
+  badge(X, t);
+  subtitles(X, t);
+  grain(X, t);
+  // global fade in / out
+  const fo = Math.max(1 - P(t, 0, .5), P(t, 88.6, 1.35));
+  if (fo > 0) { X.fillStyle = `rgba(0,0,0,${fo})`; X.fillRect(0, 0, W, H); }
+}
+async function init() {
+  TL = await (await fetch('build/timeline.json')).json();
+  SUBS = await (await fetch('build/subs.json')).json();
+  PHOTO = new Image(); PHOTO.src = 'assets/nurul_jannah.jpg'; await PHOTO.decode();
+  await document.fonts.load('900 100px "Inter Display"'); await document.fonts.load('800 50px "Inter Display"');
+  await document.fonts.load('italic 700 50px Caladea'); await document.fonts.load('500 30px "Inter Display"');
+  window.READY = true;
+  const q = new URLSearchParams(location.search).get('t'); if (q) draw(+q);
+}
+window.draw = draw; init();
+</script></body></html>
